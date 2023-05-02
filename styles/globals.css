@@ -1,0 +1,69 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,wght@0,200;0,600;1,900&display=swap");
+@import url("https://rsms.me/inter/inter.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-family: "Inter", sans-serif;
+}
+
+@supports (font-variation-settings: normal) {
+  html {
+    font-family: "Inter var", sans-serif;
+  }
+}
+
+.app {
+  @apply relative w-full h-screen overflow-hidden;
+}
+
+.home {
+  @apply w-fit xl:h-full flex xl:justify-between justify-start items-start flex-col xl:py-8 xl:px-36 sm:p-8 p-6 max-xl:gap-7 absolute z-10;
+  background-color: #F6FAF0;
+  box-shadow: 8px 0px 8px #F6FAF0;
+}
+
+.home-content {
+  @apply flex-1 2xl:justify-center justify-start flex flex-col gap-10;
+}
+
+.head-text {
+  @apply 2xl:text-[10rem] text-[6rem] 2xl:leading-[11rem] leading-[7rem] font-black;
+}
+
+/*.tile::before {
+    background-image: url('../assets/tile3.webp');
+    position: absolute;
+    top: 10%;
+    right: 5%;
+    content: '';
+    width: 450px;
+    height: 350px;
+    background-color: #012344;
+    -webkit-background-size: cover;
+    background-size: cover;
+    background-repeat: no-repeat;
+    -webkit-background-position: bottom;
+    background-position: bottom;
+    opacity: 1;
+    z-index: -1;
+}
+.tile::after {
+  background-image: url('../assets/tile2.webp');
+  position: absolute;
+  top: 52%;
+  right: 25%;
+  content: '';
+  width: 350px;
+  height: 350px;
+  background-color: #012344;
+  -webkit-background-size: cover;
+  background-size: cover;
+  background-repeat: no-repeat;
+  -webkit-background-position: bottom;
+  background-position: bottom;
+  opacity: 1;
+  z-index: 20;
+}*/
