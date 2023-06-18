@@ -1,12 +1,13 @@
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router';
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSnapshot } from 'valtio'
 import { useUser } from '../context/userContext'
 import { signInWithGoogle, signInWithMicrosoft } from '../config/auth';
+import { now } from 'moment';
 
 import { IoMdMoon, IoMdSunny } from 'react-icons/io'
 import { FaArrowLeft } from 'react-icons/fa'
@@ -25,7 +26,8 @@ import { tile1, tile2, tile3 } from '../assets'
 
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { auth, db } from '../firebase';
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, collection, getDocs, where, query } from "firebase/firestore";
+import { onAuthStateChanged } from 'firebase/auth';
 
 import { v4 as uuidv4 } from 'uuid';
 import ClipLoader from "react-spinners/ClipLoader";
@@ -33,6 +35,39 @@ import ClipLoader from "react-spinners/ClipLoader";
 export default function Sell() {
   const snap = useSnapshot(state)
   const { user, loading } = useUser();
+
+  const [userID, setUserID] = useState('')
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, user => {
+      if (user) {
+        fetchUserData(user.uid);
+      } else {
+        console.log("User is not logged in.");
+        setUserID(''); // reset userID state when no user is logged in
+      }
+    });
+
+    // Cleanup the subscription on unmount
+    return () => unsubscribe();
+  }, []); // Run effect only on mount and unmount
+
+  const fetchUserData = async (uid) => {
+    // Query 'users' collection and find the document matching the uid
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('uid', '==', uid)); // Change 'uid' to 'publicID' if necessary
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const userDoc = querySnapshot.docs[0]; // should be only one document
+      const userData = {
+        id: userDoc.id,
+        ...userDoc.data(),
+      };
+      setUserID(userData.publicID);
+    }
+  }
+  
 
   const { register: register1, handleSubmit: handleSubmit1, formState: { errors: errors1 } } = useForm();
   const { register: register2, handleSubmit: handleSubmit2, formState: { errors: errors2 } } = useForm();
@@ -83,6 +118,7 @@ export default function Sell() {
       }
   
       const productId = uuidv4();
+      const productPublicId = uuidv4();
   
       // Upload thumbnail
       const thumbnailRef = ref(storage, `thumbnails/${type}s/${data.thumbnail[0].name}`);
@@ -107,6 +143,8 @@ export default function Sell() {
   
       await productUploadTask; // wait for upload to complete
       productURL = await getDownloadURL(productRef);
+
+      const userID = auth.currentUser.uid;
   
       const productData = {
         title: data.title,
@@ -118,13 +156,22 @@ export default function Sell() {
         terms: data.terms,
         status: 'Approval pending',
         isApproved: false,
-        productID: productId
+        productID: productId,
+        publicID: productPublicId,
+        publishedDate: now(),
+        publisher: userID,
+        totalLikes: 0,
+        totalPurchases: 0,
+        parentCollection: type + 's'
       };
   
       // Save data to Firestore
-      const userID = auth.currentUser.uid;
       const userDoc = doc(db, type + 's', userID, 'submitted', productId);
       await setDoc(userDoc, productData);
+
+      // Also save to top-level collection for Algolia indexing
+      //const searchIndexDoc = doc(db, 'search_index', `${userID}_${productId}`);
+      //await setDoc(searchIndexDoc, {userID, ...productData});
   
       // Redirect to /sell
       router.push('/sell');
@@ -156,7 +203,7 @@ export default function Sell() {
               <NavbarLog />
             </motion.div>
             <motion.div className='max-w-[1920px] m-auto'>
-              <motion.div className='flex flex-row flex-wrap md:h-screen md:w-full lg:justify-around justify-start items-center 2xl:py-8 2xl:px-36 sm:p-8 p-6 max-2xl:gap-7 max-w-[1920px] m-auto'>
+              <motion.div className='flex flex-row flex-wrap md:min-h-screen md:w-full lg:justify-around justify-start items-center 2xl:py-8 2xl:px-36 sm:p-8 p-6 max-2xl:gap-7 max-w-[1920px] m-auto'>
                 {snap.step1 && (
                   <>
                     <motion.section {...slideAnimation('left')}>
@@ -271,7 +318,7 @@ export default function Sell() {
 
                               <label className="block">
                                 <span className="text-black">Write a brief and cool description of your product</span>
-                                <textarea {...register1('desc')} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="180" />
+                                <textarea {...register1('desc')} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
                               </label>
                               {errors1.desc && <span className='text-red-500 italic'>This field is required</span>}
 
@@ -321,27 +368,25 @@ export default function Sell() {
                               You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
                               Check the info of the product you've just submitted:
                             </p>
-                            <div className='rounded rounded-b-none max-w-[400px] m-auto'>
-                                <img src={imageThumbnailPreview} alt="Thumbnail" className='max-w-[100%] mt-2 h-auto m-auto rounded rounded-b-none' />
-                            </div>
-                            <div className='sm:pt-0 pt-4 border rounded rounded-t-none bg-black border-black max-w-[400px] m-auto flex sm:flex-row flex-col-reverse flex-wrap items-center justify-between'>
-                                <div className='flex flex-col flex-wrap px-4 py-2.5 sm:max-w-[50%] max-w-full w-full'>
-                                  <h3 className='capitalize 2xl:text-[2rem] text-[1.5rem] font-medium text-white'>{preview.title}</h3>
-                                  <p className='italic text-white'>{preview.desc}</p>
+                            <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                              <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                  <p className="font-semibold uppercase">{preview.ai}</p>
                                 </div>
-                                <div className='hidden sm:flex flex-col flex-wrap gap-2 max-w-[50%]'>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-bold bg-[#04E762] rounded rounded-e-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-e-none px-4 py-1'>{preview.ai}</span></p>
+                                <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                  <p className="font-bold text-black">${preview.price}</p>
                                 </div>
-                                <div className='sm:hidden flex flex-col flex-wrap gap-2 max-w-full w-full items-start'>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-bold bg-[#04E762] rounded rounded-s-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-s-none px-4 py-1'>{preview.ai}</span></p>
-                                </div>
+                              </div>
+                              <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                              </div>
                             </div>
                             </div>
                             <p className='text-center mt-4'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='filled' title='My Products' path={"/my-account"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <CustomLink type='filled' title='My Products' path={"/dashboard"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                             </div>
                           </motion.div>
                         )}
@@ -369,7 +414,7 @@ export default function Sell() {
 
                               <label className="block">
                                 <span className="text-black">Write a brief and cool description of your product</span>
-                                <textarea {...register2('desc')} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="180" />
+                                <textarea {...register2('desc')} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
                               </label>
                               {errors2.desc && <span className='text-red-500 italic'>This field is required</span>}
 
@@ -419,27 +464,25 @@ export default function Sell() {
                               You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
                               Check the info of the product you've just submitted:
                             </p>
-                            <div className='rounded rounded-b-none max-w-[400px] m-auto'>
-                                <img src={textThumbnailPreview} alt="Thumbnail" className='max-w-[100%] mt-2 h-auto m-auto rounded rounded-b-none' />
-                            </div>
-                            <div className='sm:pt-0 pt-4 border rounded rounded-t-none bg-black border-black max-w-[400px] m-auto flex sm:flex-row flex-col-reverse flex-wrap items-center justify-between'>
-                                <div className='flex flex-col flex-wrap px-4 py-2.5 sm:max-w-[50%] max-w-full w-full'>
-                                  <h3 className='capitalize 2xl:text-[2rem] text-[1.5rem] font-medium text-white'>{preview.title}</h3>
-                                  <p className='italic text-white'>{preview.desc}</p>
+                            <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                              <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                  <p className="font-semibold uppercase">{preview.ai}</p>
                                 </div>
-                                <div className='hidden sm:flex flex-col flex-wrap gap-2 max-w-[50%]'>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-bold bg-[#04E762] rounded rounded-e-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-e-none px-4 py-1'>{preview.ai}</span></p>
+                                <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                  <p className="font-bold text-black">${preview.price}</p>
                                 </div>
-                                <div className='sm:hidden flex flex-col flex-wrap gap-2 max-w-full w-full items-start'>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-bold bg-[#04E762] rounded rounded-s-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-s-none px-4 py-1'>{preview.ai}</span></p>
-                                </div>
+                              </div>
+                              <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                              </div>
                             </div>
                             </div>
                             <p className='text-center mt-4'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='filled' title='My Products' path={"/my-account"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                             </div>
                           </motion.div>
                         )}
@@ -467,7 +510,7 @@ export default function Sell() {
 
                               <label className="block">
                                 <span className="text-black">Write a brief and cool description of your product</span>
-                                <textarea {...register3('desc')} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="180" />
+                                <textarea {...register3('desc')} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
                               </label>
                               {errors3.desc && <span className='text-red-500 italic'>This field is required</span>}
 
@@ -518,27 +561,25 @@ export default function Sell() {
                               You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
                               Check the info of the product you've just submitted:
                             </p>
-                            <div className='rounded rounded-b-none max-w-[400px] m-auto'>
-                                <img src={promptThumbnailPreview} alt="Thumbnail" className='max-w-[100%] mt-2 h-auto m-auto rounded rounded-b-none' />
-                            </div>
-                            <div className='sm:pt-0 pt-4 border rounded rounded-t-none bg-black border-black max-w-[400px] m-auto flex sm:flex-row flex-col-reverse flex-wrap items-center justify-between'>
-                                <div className='flex flex-col flex-wrap px-4 py-2.5 sm:max-w-[50%] max-w-full w-full'>
-                                  <h3 className='capitalize 2xl:text-[2rem] text-[1.5rem] font-medium text-white'>{preview.title}</h3>
-                                  <p className='italic text-white'>{preview.desc}</p>
+                            <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                              <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                  <p className="font-semibold uppercase">{preview.ai}</p>
                                 </div>
-                                <div className='hidden sm:flex flex-col flex-wrap gap-2 max-w-[50%]'>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-bold bg-[#04E762] rounded rounded-e-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-e-none px-4 py-1'>{preview.ai}</span></p>
+                                <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                  <p className="font-bold text-black">${preview.price}</p>
                                 </div>
-                                <div className='sm:hidden flex flex-col flex-wrap gap-2 max-w-full w-full items-start'>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-bold bg-[#04E762] rounded rounded-s-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-s-none px-4 py-1'>{preview.ai}</span></p>
-                                </div>
+                              </div>
+                              <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                              </div>
                             </div>
                             </div>
                             <p className='text-center mt-4'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='filled' title='My Products' path={"/my-account"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                             </div>
                           </motion.div>
                         )}
@@ -564,7 +605,7 @@ export default function Sell() {
               <NavbarLog />
             </motion.div>
             <motion.div className='max-w-[1920px] m-auto'>
-              <motion.div className='flex flex-row flex-wrap md:h-screen md:w-full lg:justify-around justify-start items-center 2xl:py-8 2xl:px-36 sm:p-8 p-6 max-2xl:gap-7 max-w-[1920px] m-auto'>
+              <motion.div className='flex flex-row flex-wrap md:min-h-screen md:w-full lg:justify-around justify-start items-center 2xl:py-8 2xl:px-36 sm:p-8 p-6 max-2xl:gap-7 max-w-[1920px] m-auto'>
                 {snap.step1 && (
                   <>
                     <motion.section {...slideAnimation('left')}>
@@ -679,7 +720,7 @@ export default function Sell() {
 
                               <label className="block">
                                 <span className="text-white">Write a brief and cool description of your product</span>
-                                <textarea {...register1('desc')} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="180" />
+                                <textarea {...register1('desc')} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
                               </label>
                               {errors1.desc && <span className='text-yellow-300 italic'>This field is required</span>}
 
@@ -730,27 +771,25 @@ export default function Sell() {
                                 You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
                                 Check the info of the product you've just submitted:
                               </p>
-                              <div className='rounded rounded-b-none max-w-[400px] m-auto'>
-                                <img src={imageThumbnailPreview} alt="Thumbnail" className='max-w-[100%] mt-2 h-auto m-auto rounded rounded-b-none' />
-                              </div>
-                              <div className='sm:pt-0 pt-4 border rounded rounded-t-none bg-[#04E762] border-[#04E762] max-w-[400px] m-auto flex sm:flex-row flex-col-reverse flex-wrap items-center justify-between'>
-                                <div className='flex flex-col flex-wrap px-4 py-2.5 sm:max-w-[50%] max-w-full w-full'>
-                                  <h3 className='capitalize 2xl:text-[2rem] text-[1.5rem] font-medium text-black'>{preview.title}</h3>
-                                  <p className='italic text-black'>{preview.desc}</p>
+                              <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                  <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                  <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                    <p className="font-semibold uppercase">{preview.ai}</p>
+                                  </div>
+                                  <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                    <p className="font-bold text-white">${preview.price}</p>
+                                  </div>
                                 </div>
-                                <div className='hidden sm:flex flex-col flex-wrap gap-2 max-w-[50%]'>
-                                  <p className='text-end text-[#04E762] md:text-base text-sm'><span className='font-bold bg-black rounded rounded-e-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-e-none px-4 py-1'>{preview.ai}</span></p>
-                                </div>
-                                <div className='sm:hidden flex flex-col flex-wrap gap-2 max-w-full w-full items-start'>
-                                  <p className='text-start text-[#04E762] md:text-base text-sm'><span className='font-bold bg-black rounded rounded-s-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-s-none px-4 py-1'>{preview.ai}</span></p>
+                                <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                  <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                  <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
                                 </div>
                               </div>
                             </div>
                             <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='outline' title='My Products' path={"/my-account"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                             </div>
                           </motion.div>
                         )}
@@ -778,7 +817,7 @@ export default function Sell() {
 
                               <label className="block">
                                 <span className="text-white">Write a brief and cool description of your product</span>
-                                <textarea {...register2('desc')} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="180" />
+                                <textarea {...register2('desc')} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
                               </label>
                               {errors2.desc && <span className='text-yellow-300 italic'>This field is required</span>}
 
@@ -829,27 +868,25 @@ export default function Sell() {
                                 You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
                                 Check the info of the product you've just submitted:
                               </p>
-                              <div className='rounded rounded-b-none max-w-[400px] m-auto'>
-                                <img src={textThumbnailPreview} alt="Thumbnail" className='max-w-[100%] mt-2 h-auto m-auto rounded rounded-b-none' />
-                              </div>
-                              <div className='sm:pt-0 pt-4 border rounded rounded-t-none bg-[#04E762] border-[#04E762] max-w-[400px] m-auto flex sm:flex-row flex-col-reverse flex-wrap items-center justify-between'>
-                                <div className='flex flex-col flex-wrap px-4 py-2.5 sm:max-w-[50%] max-w-full w-full'>
-                                  <h3 className='capitalize 2xl:text-[2rem] text-[1.5rem] font-medium text-black'>{preview.title}</h3>
-                                  <p className='italic text-black'>{preview.desc}</p>
+                              <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                  <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                  <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                    <p className="font-semibold uppercase">{preview.ai}</p>
+                                  </div>
+                                  <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                    <p className="font-bold text-white">${preview.price}</p>
+                                  </div>
                                 </div>
-                                <div className='hidden sm:flex flex-col flex-wrap gap-2 max-w-[50%]'>
-                                  <p className='text-end text-[#04E762] md:text-base text-sm'><span className='font-bold bg-black rounded rounded-e-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-e-none px-4 py-1'>{preview.ai}</span></p>
-                                </div>
-                                <div className='sm:hidden flex flex-col flex-wrap gap-2 max-w-full w-full items-start'>
-                                  <p className='text-start text-[#04E762] md:text-base text-sm'><span className='font-bold bg-black rounded rounded-s-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-s-none px-4 py-1'>{preview.ai}</span></p>
+                                <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                  <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                  <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
                                 </div>
                               </div>
                             </div>
                             <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='outline' title='My Products' path={"/my-account"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                             </div>
                           </motion.div>
                         )}
@@ -877,7 +914,7 @@ export default function Sell() {
 
                               <label className="block">
                                 <span className="text-white">Write a brief and cool description of your product</span>
-                                <textarea {...register3('desc')} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="180" />
+                                <textarea {...register3('desc')} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
                               </label>
                               {errors3.desc && <span className='text-yellow-300 italic'>This field is required</span>}
 
@@ -928,27 +965,25 @@ export default function Sell() {
                                 You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
                                 Check the info of the product you've just submitted:
                               </p>
-                              <div className='rounded rounded-b-none max-w-[400px] m-auto'>
-                                <img src={promptThumbnailPreview} alt="Thumbnail" className='max-w-[100%] mt-2 h-auto m-auto rounded rounded-b-none' />
-                              </div>
-                              <div className='sm:pt-0 pt-4 border rounded rounded-t-none bg-[#04E762] border-[#04E762] max-w-[400px] m-auto flex sm:flex-row flex-col-reverse flex-wrap items-center justify-between'>
-                                <div className='flex flex-col flex-wrap px-4 py-2.5 sm:max-w-[50%] max-w-full w-full'>
-                                  <h3 className='capitalize 2xl:text-[2rem] text-[1.5rem] font-medium text-black'>{preview.title}</h3>
-                                  <p className='italic text-black'>{preview.desc}</p>
+                              <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                  <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                  <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                    <p className="font-semibold uppercase">{preview.ai}</p>
+                                  </div>
+                                  <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                    <p className="font-bold text-white">${preview.price}</p>
+                                  </div>
                                 </div>
-                                <div className='hidden sm:flex flex-col flex-wrap gap-2 max-w-[50%]'>
-                                  <p className='text-end text-[#04E762] md:text-base text-sm'><span className='font-bold bg-black rounded rounded-e-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-end text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-e-none px-4 py-1'>{preview.ai}</span></p>
-                                </div>
-                                <div className='sm:hidden flex flex-col flex-wrap gap-2 max-w-full w-full items-start'>
-                                  <p className='text-start text-[#04E762] md:text-base text-sm'><span className='font-bold bg-black rounded rounded-s-none px-4 py-1'>${preview.price}</span></p>
-                                  <p className='text-start text-black md:text-base text-sm'><span className='font-semibold bg-white rounded rounded-s-none px-4 py-1'>{preview.ai}</span></p>
+                                <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                  <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                  <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
                                 </div>
                               </div>
                             </div>
                             <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='outline' title='My Products' path={"/my-account"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                             </div>
                           </motion.div>
                         )}

@@ -33,37 +33,71 @@ html {
   @apply 2xl:text-[10rem] text-[6rem] 2xl:leading-[11rem] leading-[7rem] font-black;
 }
 
-/*.tile::before {
-    background-image: url('../assets/tile3.webp');
-    position: absolute;
-    top: 10%;
-    right: 5%;
-    content: '';
-    width: 450px;
-    height: 350px;
-    background-color: #012344;
-    -webkit-background-size: cover;
-    background-size: cover;
-    background-repeat: no-repeat;
-    -webkit-background-position: bottom;
-    background-position: bottom;
-    opacity: 1;
-    z-index: -1;
+
+
+
+.download-btn {
+  @apply w-14 h-14 flex justify-center items-center rounded-full glassmorphism cursor-pointer outline-none;
 }
-.tile::after {
-  background-image: url('../assets/tile2.webp');
-  position: absolute;
-  top: 52%;
-  right: 25%;
-  content: '';
-  width: 350px;
-  height: 350px;
-  background-color: #012344;
-  -webkit-background-size: cover;
-  background-size: cover;
-  background-repeat: no-repeat;
-  -webkit-background-position: bottom;
-  background-position: bottom;
-  opacity: 1;
-  z-index: 20;
-}*/
+
+.editortabs-container {
+  @apply glassmorphism w-16 border-[2px] rounded-lg flex flex-col justify-center items-center ml-1 py-4 gap-4;
+}
+
+.othertabs-container {
+  @apply glassmorphism w-48 mx-auto border-[2px] rounded-lg flex flex-row justify-center items-center px-4 gap-4;
+}
+
+.filtertabs-container {
+  @apply absolute z-10 bottom-5 right-0 left-0 w-full flex justify-center items-center flex-wrap gap-4;
+}
+
+.aipicker-container {
+  @apply absolute left-full ml-3 glassmorphism p-3 w-[195px] h-[220px] rounded-md flex flex-col gap-4;
+}
+
+.aipicker-textarea {
+  @apply w-full bg-transparent text-sm border border-gray-300 p-2 outline-none flex-1;
+}
+
+.filepicker-container {
+  @apply absolute left-full ml-3 glassmorphism p-3 w-[195px] h-[220px] flex flex-col rounded-md;
+}
+
+.filepicker-label {
+  @apply border border-gray-300 py-1.5 px-2 rounded-md shadow-sm text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 cursor-pointer w-fit;
+}
+
+.tab-btn {
+  @apply w-14 h-14 flex justify-center items-center cursor-pointer select-none;
+}
+
+.glassmorphism {
+  background: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 2px 30px 0 rgba(31, 38, 135, 0.07);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(4, 231, 98, 0.18);
+}
+
+.glassmorphism-black {
+  background: rgba(17, 24, 39, 0.25);
+  box-shadow: 0 2px 30px 0 rgba(31, 38, 135, 0.07);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(4, 231, 98, 0.18);
+}
+
+.sketch-picker {
+  width: 170px !important;
+  background: rgba(255, 255, 255, 0.25) !important;
+  box-shadow: 0 2px 30px 0 rgba(31, 38, 135, 0.07) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 6px !important;
+}
+
+.sketch-picker > div:nth-child(3) {
+  display: none !important;
+}

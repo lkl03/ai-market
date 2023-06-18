@@ -1,17 +1,20 @@
 import { swatch, fileIcon, ai, logoShirt, stylishShirt } from "../assets";
+import { IoMdMoon, IoMdSunny } from 'react-icons/io'
+import { FaImage, FaRobot } from 'react-icons/fa'
+import { FiFileText } from 'react-icons/fi'
 
 export const EditorTabs = [
   {
-    name: "colorpicker",
-    icon: swatch,
+    name: "imagepicker",
+    icon: <FaImage size={30} />,
   },
   {
-    name: "filepicker",
-    icon: fileIcon,
+    name: "textpicker",
+    icon: <FiFileText size={30} />,
   },
   {
-    name: "aipicker",
-    icon: ai,
+    name: "promptpicker",
+    icon: <FaRobot size={30} />,
   },
 ];
 
