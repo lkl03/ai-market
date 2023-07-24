@@ -1,7 +1,8 @@
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router';
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import useState from 'react-usestateref';
 import { useForm } from 'react-hook-form';
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSnapshot } from 'valtio'
@@ -10,7 +11,7 @@ import { signInWithGoogle, signInWithMicrosoft } from '../config/auth';
 import { now } from 'moment';
 
 import { IoMdMoon, IoMdSunny } from 'react-icons/io'
-import { FaArrowLeft } from 'react-icons/fa'
+import { FaArrowLeft, FaPaypal } from 'react-icons/fa'
 
 import state from '../store'
 import { CustomButton, CustomLink, GoogleButton, Navbar, NavbarLog, Footer } from '../components'
@@ -35,29 +36,31 @@ import ClipLoader from "react-spinners/ClipLoader";
 export default function Sell() {
   const snap = useSnapshot(state)
   const { user, loading } = useUser();
-
+  
   const [userID, setUserID] = useState('')
-
+  
+  const [paypalInfo, setPaypalInfo, paypalInfoRef] = useState('')
+  const [paypalIsActive, setPaypalIsActive, paypalIsActiveRef] = useState(false)
+  const [message, setMessage, messageRef] = useState({});
+  
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, user => {
       if (user) {
         fetchUserData(user.uid);
       } else {
-        console.log("User is not logged in.");
         setUserID(''); // reset userID state when no user is logged in
       }
     });
-
+  
     // Cleanup the subscription on unmount
     return () => unsubscribe();
   }, []); // Run effect only on mount and unmount
-
+  
   const fetchUserData = async (uid) => {
-    // Query 'users' collection and find the document matching the uid
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('uid', '==', uid)); // Change 'uid' to 'publicID' if necessary
+    const q = query(usersRef, where('uid', '==', uid));
     const querySnapshot = await getDocs(q);
-
+  
     if (!querySnapshot.empty) {
       const userDoc = querySnapshot.docs[0]; // should be only one document
       const userData = {
@@ -65,9 +68,22 @@ export default function Sell() {
         ...userDoc.data(),
       };
       setUserID(userData.publicID);
+      setPaypalInfo({
+        email: userData.paypalEmail,
+        merchantID: userData.paypalMerchantID,
+        isLogged: userData.userIsPaypalLogged
+      })
+      checkPaypalStatus()
     }
   }
   
+  const checkPaypalStatus = async () => {
+    if (paypalInfoRef.current.email != '' && paypalInfoRef.current.merchantID != '' && paypalInfoRef.current.isLogged != false) {
+      setPaypalIsActive(true)
+    } else {
+      setPaypalIsActive(false)
+    }
+  }
 
   const { register: register1, handleSubmit: handleSubmit1, formState: { errors: errors1 } } = useForm();
   const { register: register2, handleSubmit: handleSubmit2, formState: { errors: errors2 } } = useForm();
@@ -77,15 +93,23 @@ export default function Sell() {
   const [textThumbnailPreview, setTextThumbnailPreview] = useState(null);
   const [promptThumbnailPreview, setPromptThumbnailPreview] = useState(null);
   const [formSubmitted, setFormSubmitted] = useState(false);
+  const [termsChecked, setTermsChecked, termsCheckedRef] = useState(false);
   const router = useRouter();
 
   const [infoLoading, setInfoLoading] = useState(false);
+  const [showMessage, setShowMessage, showMessageRef] = useState(false);
   const [error, setError] = useState(null);
 
   const previewSetters = {
     'image': setImageThumbnailPreview,
     'text': setTextThumbnailPreview,
     'prompt': setPromptThumbnailPreview,
+  };
+
+  const [stagedData, setStagedData, stagedDataRef] = useState(null);
+
+  const handleCheckboxChange = (e) => {
+    setTermsChecked(e.target.checked);
   };
 
   const onThumbnailChange = (e, type) => {
@@ -103,14 +127,8 @@ export default function Sell() {
   };
   
   const onSubmit = async (data, type) => {
-    setInfoLoading(true);
-    setError(null);
-  
     try {
       setPreview(data);
-  
-      const storage = getStorage();
-      let thumbnailURL, productURL;
   
       // Check if user is logged in
       if (!auth.currentUser) {
@@ -120,31 +138,60 @@ export default function Sell() {
       const productId = uuidv4();
       const productPublicId = uuidv4();
   
-      // Upload thumbnail
-      const thumbnailRef = ref(storage, `thumbnails/${type}s/${data.thumbnail[0].name}`);
-      const thumbnailUploadTask = uploadBytesResumable(thumbnailRef, data.thumbnail[0]);
+      // Determine paths
+      const thumbnailPath = `thumbnails/${type}s/${data.thumbnail[0].name}`;
+      const productPath = `products/${type}s/${data.product[0].name}`;
   
-      thumbnailUploadTask.on('state_changed', snapshot => {
-        var progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        console.log('Thumbnail upload is ' + progress + '% done');
+      const userID = auth.currentUser.uid;
+  
+      setStagedData({
+        userID,
+        type,
+        data,
+        productId,
+        productPublicId,
+        thumbnailPath,
+        productPath,
       });
   
+      router.push('/sell');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setInfoLoading(false);
+    }
+  
+    setFormSubmitted(true);
+  };
+
+  const uploadProduct = async () => {
+    setInfoLoading(true);
+    setError(null);
+  
+    const storage = getStorage();
+    
+    try {
+      const {
+        userID,
+        type,
+        data,
+        productId,
+        productPublicId,
+        thumbnailPath,
+        productPath,
+      } = stagedDataRef.current;
+  
+      // Upload thumbnail
+      const thumbnailRef = ref(storage, thumbnailPath);
+      const thumbnailUploadTask = uploadBytesResumable(thumbnailRef, data.thumbnail[0]);
       await thumbnailUploadTask; // wait for upload to complete
-      thumbnailURL = await getDownloadURL(thumbnailRef);
+      let thumbnailURL = await getDownloadURL(thumbnailRef);
   
       // Upload product
-      const productRef = ref(storage, `products/${type}s/${data.product[0].name}`);
+      const productRef = ref(storage, productPath);
       const productUploadTask = uploadBytesResumable(productRef, data.product[0]);
-  
-      productUploadTask.on('state_changed', snapshot => {
-        var progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-        console.log('Product upload is ' + progress + '% done');
-      });
-  
       await productUploadTask; // wait for upload to complete
-      productURL = await getDownloadURL(productRef);
-
-      const userID = auth.currentUser.uid;
+      let productURL = await getDownloadURL(productRef);
   
       const productData = {
         title: data.title,
@@ -153,7 +200,7 @@ export default function Sell() {
         productURL,
         price: data.price,
         ai: data.ai,
-        terms: data.terms,
+        terms: termsCheckedRef.current,
         status: 'Approval pending',
         isApproved: false,
         productID: productId,
@@ -168,21 +215,117 @@ export default function Sell() {
       // Save data to Firestore
       const userDoc = doc(db, type + 's', userID, 'submitted', productId);
       await setDoc(userDoc, productData);
-
-      // Also save to top-level collection for Algolia indexing
-      //const searchIndexDoc = doc(db, 'search_index', `${userID}_${productId}`);
-      //await setDoc(searchIndexDoc, {userID, ...productData});
   
-      // Redirect to /sell
-      router.push('/sell');
+      // Prepare data for local storage
+      const dataForLocalStorage = {
+        name: user.displayName,
+        email: user.email,
+        product: productData.title,
+      }
+  
+      // Save data to local storage
+      localStorage.setItem('savedData', JSON.stringify(dataForLocalStorage));
+  
+      // Clear staged data
+      setStagedData(null);
     } catch (err) {
-      console.error(err);
       setError(err.message);
     } finally {
       setInfoLoading(false);
+      router.push(`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL}`)
     }
+  };
+
+  const uploadProductDirect = async () => {
+    setInfoLoading(true);
+    setError(null);
   
-    setFormSubmitted(true);
+    const storage = getStorage();
+    
+    try {
+      const {
+        userID,
+        type,
+        data,
+        productId,
+        productPublicId,
+        thumbnailPath,
+        productPath,
+      } = stagedDataRef.current;
+  
+      // Upload thumbnail
+      const thumbnailRef = ref(storage, thumbnailPath);
+      const thumbnailUploadTask = uploadBytesResumable(thumbnailRef, data.thumbnail[0]);
+      await thumbnailUploadTask; // wait for upload to complete
+      let thumbnailURL = await getDownloadURL(thumbnailRef);
+  
+      // Upload product
+      const productRef = ref(storage, productPath);
+      const productUploadTask = uploadBytesResumable(productRef, data.product[0]);
+      await productUploadTask; // wait for upload to complete
+      let productURL = await getDownloadURL(productRef);
+  
+      const productData = {
+        title: data.title,
+        desc: data.desc,
+        thumbnailURL,
+        productURL,
+        price: data.price,
+        ai: data.ai,
+        terms: termsCheckedRef.current,
+        status: 'Approval pending',
+        isApproved: false,
+        productID: productId,
+        publicID: productPublicId,
+        publishedDate: now(),
+        publisher: userID,
+        totalLikes: 0,
+        totalPurchases: 0,
+        parentCollection: type + 's'
+      };
+  
+      // Save data to Firestore
+      const userDoc = doc(db, type + 's', userID, 'submitted', productId);
+      await setDoc(userDoc, productData);
+  
+      const dataForEmail = {
+        name: user.displayName,
+        email: user.email,
+        product: productData.title,
+      }
+  
+      fetch("../api/approval", {
+        "method": "POST",
+        "headers": { "content-type": "application/json" },
+        "body": JSON.stringify(dataForEmail)
+      }).then((response) => {
+        // Check if the request was successful
+        if (!response.ok) {
+          throw new Error('Error sending data to API');
+        }
+      }).catch((error) => {
+        setError('Error sending data to API');
+      });
+  
+      setMessage({
+        status: 'success',
+        text: 'You\'ve just submitted your product! Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. Check the status of your submitted products:'
+      });
+  
+      // Clear staged data
+      setStagedData(null);
+    } catch (err) {
+      setError(err.message);
+      setMessage({
+        status: 'error',
+        text: 'Something went wrong! Please try again and if the error persists reach out to us for assistance.'
+      });
+    } finally {
+      setShowMessage(true);
+      setTimeout(() => {
+        router.push(`/dashboard/${userID}`);
+      }, 4000);
+    }
   };
 
   return (
@@ -303,92 +446,218 @@ export default function Sell() {
                   {!user && (
                     ''
                   )}
-                  {user && (
+                  {user && paypalIsActiveRef.current === false && (
                     <>
                         {!formSubmitted ? (
                           <>
                             <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Image = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
                             <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <form onSubmit={handleSubmit1((data) => onSubmit(data, 'image'))} className="space-y-4 mt-10">
-                              <label className="block">
-                                <span className="text-black">What's the title of your product?</span>
-                                <input {...register1('title')} disabled={infoLoading} placeholder="Pack of six great landscape images with Picasso style" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
-                              </label>
-                              {errors1.title && <span className='text-red-500 italic'>This field is required</span>}
+                              <form onSubmit={handleSubmit1((data) => onSubmit(data, 'image'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-black">What's the title of your product?</span>
+                                  <input {...register1('title', { required: true })} disabled={infoLoading} placeholder="Pack of six great landscape images with Picasso style" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors1.title && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">Write a brief and cool description of your product</span>
-                                <textarea {...register1('desc')} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
-                              </label>
-                              {errors1.desc && <span className='text-red-500 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-black">Write a brief and cool description of your product</span>
+                                  <textarea {...register1('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors1.desc && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
-                                <input {...register1('thumbnail', { validate: file => file && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'image')} />
-                              </label>
-                              {errors1.thumbnail && <span className='text-red-500 italic'>Invalid file</span>}
-                              {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+                                <label className="block">
+                                  <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register1('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'image')} />
+                                </label>
+                                {errors1.thumbnail?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors1.thumbnail?.type === 'validate' && <span className='text-red-500 italic'>Invalid file</span>}
+                                {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
 
-                              <label className="block">
-                                <span className="text-black">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
-                                <input {...register1('product', { validate: file => file && file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') && file[0].size <= 50 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
-                              </label>
-                              {errors1.product && <span className='text-red-500 italic'>Invalid product</span>}
+                                <label className="block">
+                                  <span className="text-black">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register1('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors1.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors1.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
 
-                              <label className="block">
-                                <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
-                                <input {...register1('price')} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
-                              </label>
-                              {errors1.price && <span className='text-red-500 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register1('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors1.price && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">What AI have you used for this product?</span>
-                                <input {...register1('ai')} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="25" />
-                              </label>
-                              {errors1.ai && <span className='text-red-500 italic'>This field is required</span>}
-
-                              <label className="flex items-center justify-center space-x-2">
-                                <input {...register1('terms', { required: true })} disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" />
-                                <span className="text-black">I agree to the terms of service</span>
-                              </label>
-                              {errors1.terms && <span className='text-red-500 italic'>This field is required</span>}
-                              <div className='flex flex-wrap items-center justify-center'>
-                              <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
-                                {infoLoading ? <ClipLoader /> : 'Submit'}
-                              </button>
-                              </div>
-                            </form>
+                                <label className="block">
+                                  <span className="text-black">What AI have you used for this product?</span>
+                                  <input {...register1('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors1.ai && <span className='text-red-500 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
                             </motion.div>
                           </>
                         ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
                           <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <div className='md:max-w-[75%] max-w-[90%] m-auto'>
-                            <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>Success!</h2>
-                            <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
-                              You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
-                              Check the info of the product you've just submitted:
-                            </p>
-                            <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
-                              <div className='relative max-w-full md:max-w-[350px] m-auto'>
-                                <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
-                                <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                  <p className="font-semibold uppercase">{preview.ai}</p>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-black">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                      <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, you have to integrate your PayPal account using the button below to be able to receive the funds of your sales. <br></br> Once you complete the PayPal login process, your product will be automatically send to review. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-gray-600">I agree to the terms of service</span>
+                                  </label>
                                 </div>
-                                <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
-                                  <p className="font-bold text-black">${preview.price}</p>
-                                </div>
-                              </div>
-                              <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
-                                <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
-                                <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
-                              </div>
-                            </div>
-                            </div>
-                            <p className='text-center mt-4'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='filled' title='My Products' path={"/dashboard"} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => uploadProduct()}>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-white'/> Continue with PayPal</>}</button>
                             </div>
                           </motion.div>
+                          </>
+                        )}
+                    </>
+                  )}
+                  {user && paypalIsActiveRef.current === true && (
+                    <>
+                        {!formSubmitted ? (
+                          <>
+                            <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Image = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
+                            <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                              <form onSubmit={handleSubmit1((data) => onSubmit(data, 'image'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-black">What's the title of your product?</span>
+                                  <input {...register1('title', { required: true })} disabled={infoLoading} placeholder="Pack of six great landscape images with Picasso style" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors1.title && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Write a brief and cool description of your product</span>
+                                  <textarea {...register1('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors1.desc && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register1('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'image')} />
+                                </label>
+                                {errors1.thumbnail?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors1.thumbnail?.type === 'validate' && <span className='text-red-500 italic'>Invalid file</span>}
+                                {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+
+                                <label className="block">
+                                  <span className="text-black">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register1('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors1.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors1.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register1('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors1.price && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">What AI have you used for this product?</span>
+                                  <input {...register1('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors1.ai && <span className='text-red-500 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
+                            </motion.div>
+                          </>
+                        ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
+                          <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-black">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                      <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, please read and agree to our terms of service. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-gray-600">I agree to the terms of service</span>
+                                  </label>
+                                </div>
+                            <div className='flex flex-wrap items-center justify-center mt-4'>
+                            <button type="button" 
+                              onClick={
+                                () => uploadProductDirect()} 
+                              disabled={!termsChecked || infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] disabled:opacity-50 w-fit font-bold text-sm`}>
+                                {infoLoading ? <ClipLoader /> : 'Continue'}
+                              </button>
+                            </div>
+                          </motion.div>
+                          {showMessageRef.current == false ? '' :
+                                <motion.div className={`absolute w-1/2 h-auto p-4 rounded-xl z-50 flex flex-col flex-wrap items-center justify-center gap-2 ${messageRef.current.status === 'success' ? 'bg-[#388445]' : 'bg-[#ff5555]'}`}>
+                                <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-white'>{messageRef.current.status === 'success' ? '¡Success!' : '¡Oops!'}</h2>
+                                <p className='text-center text-white'>{messageRef.current.text}</p>
+                                <CustomLink 
+                                    type='filled' 
+                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
+                                />
+                            </motion.div>
+                            }
+                          </>
                         )}
                     </>
                   )}
@@ -399,92 +668,218 @@ export default function Sell() {
                   {!user && (
                     ''
                   )}
-                  {user && (
+                  {user && paypalIsActiveRef.current === false && (
                     <>
                         {!formSubmitted ? (
                           <>
                             <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Text = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
                             <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <form onSubmit={handleSubmit2((data) => onSubmit(data, 'text'))} className="space-y-4 mt-10">
-                              <label className="block">
-                                <span className="text-black">What's the title of your product?</span>
-                                <input {...register2('title')} disabled={infoLoading} placeholder="Story of a XXII century robot superhero" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
-                              </label>
-                              {errors2.title && <span className='text-red-500 italic'>This field is required</span>}
+                              <form onSubmit={handleSubmit2((data) => onSubmit(data, 'text'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-black">What's the title of your product?</span>
+                                  <input {...register2('title', { required: true })} disabled={infoLoading} placeholder="Story of a XXII century robot superhero" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors2.title && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">Write a brief and cool description of your product</span>
-                                <textarea {...register2('desc')} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
-                              </label>
-                              {errors2.desc && <span className='text-red-500 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-black">Write a brief and cool description of your product</span>
+                                  <textarea {...register2('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors2.desc && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
-                                <input {...register2('thumbnail', { validate: file => file && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'text')} />
-                              </label>
-                              {errors2.thumbnail && <span className='text-red-500 italic'>Invalid file</span>}
-                              {textThumbnailPreview && <img src={textThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+                                <label className="block">
+                                  <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register2('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'text')} />
+                                </label>
+                                {errors2.thumbnail?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors2.thumbnail?.type === 'validate' && <span className='text-red-500 italic'>Invalid file</span>}
+                                {textThumbnailPreview && <img src={textThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
 
-                              <label className="block">
-                                <span className="text-black">Upload a PDF or a compressed folder with the text your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF or ZIP, RAR, max 50MB)</span></span>
-                                <input {...register2('product', { validate: file => file && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
-                              </label>
-                              {errors2.product && <span className='text-red-500 italic'>Invalid product</span>}
+                                <label className="block">
+                                  <span className="text-black">Upload a PDF or a compressed folder with the text your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register2('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.pdf') || file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".pdf,.zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors2.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors2.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
 
-                              <label className="block">
-                                <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
-                                <input {...register2('price')} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
-                              </label>
-                              {errors2.price && <span className='text-red-500 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register2('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors2.price && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">What AI have you used for this product?</span>
-                                <input {...register2('ai')} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="25" />
-                              </label>
-                              {errors2.ai && <span className='text-red-500 italic'>This field is required</span>}
-
-                              <label className="flex items-center justify-center space-x-2">
-                                <input {...register2('terms', { required: true })} disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" />
-                                <span className="text-black">I agree to the terms of service</span>
-                              </label>
-                              {errors2.terms && <span className='text-red-500 italic'>This field is required</span>}
-                              <div className='flex flex-wrap items-center justify-center'>
-                              <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
-                                {infoLoading ? <ClipLoader /> : 'Submit'}
-                              </button>
-                              </div>
-                            </form>
+                                <label className="block">
+                                  <span className="text-black">What AI have you used for this product?</span>
+                                  <input {...register2('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors2.ai && <span className='text-red-500 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
                             </motion.div>
                           </>
                         ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
                           <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <div className='md:max-w-[75%] max-w-[90%] m-auto'>
-                            <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>Success!</h2>
-                            <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
-                              You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
-                              Check the info of the product you've just submitted:
-                            </p>
-                            <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
-                              <div className='relative max-w-full md:max-w-[350px] m-auto'>
-                                <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
-                                <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                  <p className="font-semibold uppercase">{preview.ai}</p>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-black">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                      <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, you have to integrate your PayPal account using the button below to be able to receive the funds of your sales. <br></br> Once you complete the PayPal login process, your product will be automatically send to review. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-gray-600">I agree to the terms of service</span>
+                                  </label>
                                 </div>
-                                <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
-                                  <p className="font-bold text-black">${preview.price}</p>
-                                </div>
-                              </div>
-                              <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
-                                <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
-                                <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
-                              </div>
-                            </div>
-                            </div>
-                            <p className='text-center mt-4'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => uploadProduct()}>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-white'/> Continue with PayPal</>}</button>
                             </div>
                           </motion.div>
+                          </>
+                        )}
+                    </>
+                  )}
+                  {user && paypalIsActiveRef.current === true && (
+                    <>
+                        {!formSubmitted ? (
+                          <>
+                            <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Text = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
+                            <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                              <form onSubmit={handleSubmit2((data) => onSubmit(data, 'text'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-black">What's the title of your product?</span>
+                                  <input {...register2('title', { required: true })} disabled={infoLoading} placeholder="Story of a XXII century robot superhero" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors2.title && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Write a brief and cool description of your product</span>
+                                  <textarea {...register2('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors2.desc && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register2('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'text')} />
+                                </label>
+                                {errors2.thumbnail?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors2.thumbnail?.type === 'validate' && <span className='text-red-500 italic'>Invalid file</span>}
+                                {textThumbnailPreview && <img src={textThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+
+                                <label className="block">
+                                  <span className="text-black">Upload a PDF or a compressed folder with the text your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register2('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.pdf') || file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".pdf,.zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors2.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors2.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register2('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors2.price && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">What AI have you used for this product?</span>
+                                  <input {...register2('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors2.ai && <span className='text-red-500 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
+                            </motion.div>
+                          </>
+                        ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
+                          <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-black">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                      <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, please read and agree to our terms of service. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-gray-600">I agree to the terms of service</span>
+                                  </label>
+                                </div>
+                            <div className='flex flex-wrap items-center justify-center mt-4'>
+                              <button type="button" 
+                              onClick={
+                                () => uploadProductDirect()} 
+                              disabled={!termsChecked || infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] disabled:opacity-50 w-fit font-bold text-sm`}>
+                                {infoLoading ? <ClipLoader /> : 'Continue'}
+                              </button>
+                            </div>
+                          </motion.div>
+                          {showMessageRef.current == false ? '' :
+                                <motion.div className={`absolute w-1/2 h-auto p-4 rounded-xl z-50 flex flex-col flex-wrap items-center justify-center gap-2 ${messageRef.current.status === 'success' ? 'bg-[#388445]' : 'bg-[#ff5555]'}`}>
+                                <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-white'>{messageRef.current.status === 'success' ? '¡Success!' : '¡Oops!'}</h2>
+                                <p className='text-center text-white'>{messageRef.current.text}</p>
+                                <CustomLink 
+                                    type='filled' 
+                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
+                                />
+                            </motion.div>
+                            }
+                          </>
                         )}
                     </>
                   )}
@@ -495,96 +890,317 @@ export default function Sell() {
                     {!user && (
                       ''
                     )}
-                    {user && (
+                    {user && paypalIsActiveRef.current === false && (
                       <>
                         {!formSubmitted ? (
                           <>
                             <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Prompt = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
                             <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <form onSubmit={handleSubmit3((data) => onSubmit(data, 'prompt'))} className="space-y-4 mt-10">
-                              <label className="block">
-                                <span className="text-black">What's the title of your product?</span>
-                                <input {...register3('title')} disabled={infoLoading} placeholder="Anime Illustrations" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
-                              </label>
-                              {errors3.title && <span className='text-red-500 italic'>This field is required</span>}
+                              <form onSubmit={handleSubmit3((data) => onSubmit(data, 'prompt'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-black">What's the title of your product?</span>
+                                  <input {...register3('title', { required: true })} disabled={infoLoading} placeholder="Anime Illustrations" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors3.title && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">Write a brief and cool description of your product</span>
-                                <textarea {...register3('desc')} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
-                              </label>
-                              {errors3.desc && <span className='text-red-500 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-black">Write a brief and cool description of your product</span>
+                                  <textarea {...register3('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors3.desc && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
-                                <input {...register3('thumbnail', { validate: file => file && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'prompt')} />
-                              </label>
-                              {errors3.thumbnail && <span className='text-red-500 italic'>Invalid file</span>}
-                              {promptThumbnailPreview && <img src={promptThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+                                <label className="block">
+                                  <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register3('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'prompt')} />
+                                </label>
+                                {errors3.thumbnail?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors3.thumbnail?.type === 'validate' && <span className='text-red-500 italic'>Invalid file</span>}
+                                {promptThumbnailPreview && <img src={promptThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
 
-                              <label className="block">
-                                <span className="text-black">Upload a .PDF or .TXT file or a compressed folder with the prompt your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF, TXT or ZIP, RAR, max 50MB)</span></span>
-                                <input {...register3('product', { validate: file => file && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
-                              </label>
-                              {errors3.product && <span className='text-red-500 italic'>Invalid product</span>}
+                                <label className="block">
+                                  <span className="text-black">Upload a .PDF or .TXT file or a compressed folder with the prompt your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF, TXT or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register3('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors3.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors3.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
 
-                              <label className="block">
-                                <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
-                                <input {...register3('price')} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
-                              </label>
-                              {errors3.price && <span className='text-red-500 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register3('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors3.price && <span className='text-red-500 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-black">What AI is this product for?</span>
-                                <input {...register3('ai')} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="25" />
-                              </label>
-                              {errors3.ai && <span className='text-red-500 italic'>This field is required</span>}
-
-                              <label className="flex items-center justify-center space-x-2">
-                                <input {...register3('terms', { required: true })} disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" />
-                                <span className="text-black">I agree to the terms of service</span>
-                              </label>
-                              {errors3.terms && <span className='text-red-500 italic'>This field is required</span>}
-
-                              <div className='flex flex-wrap items-center justify-center'>
-                              <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
-                                {infoLoading ? <ClipLoader /> : 'Submit'}
-                              </button>
-                              </div>
-                            </form>
+                                <label className="block">
+                                  <span className="text-black">What AI is this product for?</span>
+                                  <input {...register3('ai', { required: true })} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors3.ai && <span className='text-red-500 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
                             </motion.div>
                           </>
                         ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
                           <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <div className='md:max-w-[75%] max-w-[90%] m-auto'>
-                            <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>Success!</h2>
-                            <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
-                              You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
-                              Check the info of the product you've just submitted:
-                            </p>
-                            <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
-                              <div className='relative max-w-full md:max-w-[350px] m-auto'>
-                                <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
-                                <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                  <p className="font-semibold uppercase">{preview.ai}</p>
+                          <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-black">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                      <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, you have to integrate your PayPal account using the button below to be able to receive the funds of your sales. <br></br> Once you complete the PayPal login process, your product will be automatically send to review. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-gray-600">I agree to the terms of service</span>
+                                  </label>
                                 </div>
-                                <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
-                                  <p className="font-bold text-black">${preview.price}</p>
-                                </div>
-                              </div>
-                              <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
-                                <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
-                                <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
-                              </div>
-                            </div>
-                            </div>
-                            <p className='text-center mt-4'>Check the status of your submitted products:</p>
                             <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                              <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => uploadProduct()}>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-white'/> Continue with PayPal</>}</button>
                             </div>
                           </motion.div>
+                          </>
                         )}
                       </>
                     )}
+                    {user && paypalIsActiveRef.current === true && (
+                      <>
+                        {!formSubmitted ? (
+                          <>
+                            <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Prompt = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
+                            <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                              <form onSubmit={handleSubmit3((data) => onSubmit(data, 'prompt'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-black">What's the title of your product?</span>
+                                  <input {...register3('title', { required: true })} disabled={infoLoading} placeholder="Anime Illustrations" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors3.title && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Write a brief and cool description of your product</span>
+                                  <textarea {...register3('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors3.desc && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register3('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'prompt')} />
+                                </label>
+                                {errors3.thumbnail?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors3.thumbnail?.type === 'validate' && <span className='text-red-500 italic'>Invalid file</span>}
+                                {promptThumbnailPreview && <img src={promptThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+
+                                <label className="block">
+                                  <span className="text-black">Upload a .PDF or .TXT file or a compressed folder with the prompt your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF, TXT or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register3('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors3.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors3.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
+
+                                <label className="block">
+                                  <span className="text-black">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register3('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                </label>
+                                {errors3.price && <span className='text-red-500 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-black">What AI is this product for?</span>
+                                  <input {...register3('ai', { required: true })} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors3.ai && <span className='text-red-500 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
+                            </motion.div>
+                          </>
+                        ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-black hover:text-[#04E762] transition-all ease-in-out' />
+                          <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                          <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-black">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                                      <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, please read and agree to our terms of service. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-gray-600">I agree to the terms of service</span>
+                                  </label>
+                                </div>
+                            <div className='flex flex-wrap items-center justify-center mt-4'>
+                            <button type="button" 
+                              onClick={
+                                () => uploadProductDirect()} 
+                              disabled={!termsChecked || infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-[#04E762] text-black md:max-w-[170px] disabled:opacity-50 w-fit font-bold text-sm`}>
+                                {infoLoading ? <ClipLoader /> : 'Continue'}
+                              </button>
+                            </div>
+                          </motion.div>
+                          {showMessageRef.current == false ? '' :
+                                <motion.div className={`absolute w-1/2 h-auto p-4 rounded-xl z-50 flex flex-col flex-wrap items-center justify-center gap-2 ${messageRef.current.status === 'success' ? 'bg-[#388445]' : 'bg-[#ff5555]'}`}>
+                                <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-white'>{messageRef.current.status === 'success' ? '¡Success!' : '¡Oops!'}</h2>
+                                <p className='text-center text-white'>{messageRef.current.text}</p>
+                                <CustomLink 
+                                    type='filled' 
+                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
+                                />
+                            </motion.div>
+                            }
+                          </>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+                {snap.step4 && snap.step4Image && (
+                  <>
+                    <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                      <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                        <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>Success!</h2>
+                        <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                          You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
+                          Check the info of the product you've just submitted:
+                        </p>
+                        <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                          <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                            <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                            <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                              <p className="font-semibold uppercase">{preview.ai}</p>
+                            </div>
+                            <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                              <p className="font-bold text-black">${preview.price}</p>
+                            </div>
+                          </div>
+                          <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                            <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                            <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className='text-center mt-4'>Check the status of your submitted products:</p>
+                      <div className='flex flex-wrap items-center justify-center mt-4'>
+                        <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+                {snap.step4 && snap.step4Text && (
+                  <>
+                    <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                      <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                        <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>Success!</h2>
+                        <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                          You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
+                          Check the info of the product you've just submitted:
+                        </p>
+                        <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                          <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                            <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                            <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                              <p className="font-semibold uppercase">{preview.ai}</p>
+                            </div>
+                            <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                              <p className="font-bold text-black">${preview.price}</p>
+                            </div>
+                          </div>
+                          <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                            <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                            <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className='text-center mt-4'>Check the status of your submitted products:</p>
+                      <div className='flex flex-wrap items-center justify-center mt-4'>
+                        <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+                {snap.step4 && snap.step4Prompt && (
+                  <>
+                    <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                      <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                        <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-black'>Success!</h2>
+                        <p className='w-full font-normal text-gray-600 text-base text-center mt-2 mb-4'>
+                          You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
+                          Check the info of the product you've just submitted:
+                        </p>
+                        <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                          <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                            <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                            <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                              <p className="font-semibold uppercase">{preview.ai}</p>
+                            </div>
+                            <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                              <p className="font-bold text-black">${preview.price}</p>
+                            </div>
+                          </div>
+                          <div className='pt-2 md:pt-4 border rounded-b-md bg-black border-black max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                            <h3 className='capitalize text-base md:text-lg font-bold text-white truncate'>{preview.title}</h3>
+                            <p className='italic text-white text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className='text-center mt-4'>Check the status of your submitted products:</p>
+                      <div className='flex flex-wrap items-center justify-center mt-4'>
+                        <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                      </div>
+                    </motion.div>
                   </>
                 )}
               </motion.div>
@@ -702,196 +1318,446 @@ export default function Sell() {
                 )}
                 {snap.step3 && snap.step3Image && (
                   <>
-                    {!user && (
-                      ''
-                    )}
-                    {user && (
-                      <>
+                  {!user && (
+                    ''
+                  )}
+                  {user && paypalIsActiveRef.current === false && (
+                    <>
                         {!formSubmitted ? (
                           <>
-                            <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Image = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                          <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Image = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
                             <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <form onSubmit={handleSubmit1((data) => onSubmit(data, 'image'))} className="space-y-4 mt-10">
-                              <label className="block">
-                                <span className="text-white">What's the title of your product?</span>
-                                <input {...register1('title')} disabled={infoLoading} placeholder="Pack of six great landscape images with Picasso style" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
-                              </label>
-                              {errors1.title && <span className='text-yellow-300 italic'>This field is required</span>}
+                              <form onSubmit={handleSubmit1((data) => onSubmit(data, 'image'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-white">What's the title of your product?</span>
+                                  <input {...register1('title', { required: true })} disabled={infoLoading} placeholder="Pack of six great landscape images with Picasso style" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors1.title && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">Write a brief and cool description of your product</span>
-                                <textarea {...register1('desc')} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
-                              </label>
-                              {errors1.desc && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-white">Write a brief and cool description of your product</span>
+                                  <textarea {...register1('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors1.desc && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
-                                <input {...register1('thumbnail', { validate: file => file && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'image')} />
-                              </label>
-                              {errors1.thumbnail && <span className='text-yellow-300 italic'>Invalid file</span>}
-                              {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+                                <label className="block">
+                                  <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register1('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'image')} />
+                                </label>
+                                {errors1.thumbnail?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors1.thumbnail?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid file</span>}
+                                {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-white rounded' />}
 
-                              <label className="block">
-                                <span className="text-white">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
-                                <input {...register1('product', { validate: file => file && file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') && file[0].size <= 50 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
-                              </label>
-                              {errors1.product && <span className='text-yellow-300 italic'>Invalid product</span>}
+                                <label className="block">
+                                  <span className="text-white">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register1('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors1.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors1.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
 
-                              <label className="block">
-                                <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
-                                <input {...register1('price')} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
-                              </label>
-                              {errors1.price && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register1('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors1.price && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">What AI have you used for this product?</span>
-                                <input {...register1('ai')} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
-                              </label>
-                              {errors1.ai && <span className='text-yellow-300 italic'>This field is required</span>}
-
-                              <label className="flex items-center justify-center space-x-2">
-                                <input {...register1('terms', { required: true })} disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" />
-                                <span className="text-white">I agree to the terms of service</span>
-                              </label>
-                              {errors1.terms && <span className='text-yellow-300 italic'>This field is required</span>}
-
-                              <div className='flex flex-wrap items-center justify-center'>
-                                <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
-                                  {infoLoading ? <ClipLoader color={snap.color} /> : 'Submit'}
-                                </button>
-                              </div>
-                            </form>
+                                <label className="block">
+                                  <span className="text-white">What AI have you used for this product?</span>
+                                  <input {...register1('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors1.ai && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
                             </motion.div>
                           </>
                         ) : (
-                          <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <div className='md:max-w-[75%] max-w-[90%] m-auto'>
-                              <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>Success!</h2>
-                              <p className='w-full font-normal text-gray-200 text-base text-center mt-2 mb-4'>
-                                You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
-                                Check the info of the product you've just submitted:
-                              </p>
-                              <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
-                                <div className='relative max-w-full md:max-w-[350px] m-auto'>
-                                  <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
-                                  <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                    <p className="font-semibold uppercase">{preview.ai}</p>
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                              <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-white">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                      <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
                                   </div>
-                                  <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
-                                    <p className="font-bold text-white">${preview.price}</p>
-                                  </div>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, you have to integrate your PayPal account using the button below to be able to receive the funds of your sales. <br></br> Once you complete the PayPal login process, your product will be automatically send to review. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-white">I agree to the terms of service</span>
+                                  </label>
                                 </div>
-                                <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
-                                  <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
-                                  <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                <div className='flex flex-wrap items-center justify-center mt-4'>
+                                  <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => uploadProduct()}>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-[#0070BA]'/> Continue with PayPal</>}</button>
                                 </div>
-                              </div>
-                            </div>
-                            <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
-                            <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
-                            </div>
-                          </motion.div>
+                              </motion.div>
+                          </>
                         )}
-                      </>
-                    )}
+                    </>
+                  )}
+                  {user && paypalIsActiveRef.current === true && (
+                    <>
+                        {!formSubmitted ? (
+                          <>
+                          <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Image = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                            <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                              <form onSubmit={handleSubmit1((data) => onSubmit(data, 'image'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-white">What's the title of your product?</span>
+                                  <input {...register1('title', { required: true })} disabled={infoLoading} placeholder="Pack of six great landscape images with Picasso style" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors1.title && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Write a brief and cool description of your product</span>
+                                  <textarea {...register1('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This pack features six stunning landscape images that have been transformed with a unique Picasso-inspired style, resulting in a vibrant and abstract collection that will add a touch of artistic flair to any setting." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors1.desc && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register1('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'image')} />
+                                </label>
+                                {errors1.thumbnail?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors1.thumbnail?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid file</span>}
+                                {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-white rounded' />}
+
+                                <label className="block">
+                                  <span className="text-white">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register1('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors1.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors1.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register1('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors1.price && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">What AI have you used for this product?</span>
+                                  <input {...register1('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors1.ai && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
+                            </motion.div>
+                          </>
+                        ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                              <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-white">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                      <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, please read and agree to our terms of service. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-white">I agree to the terms of service</span>
+                                  </label>
+                                </div>
+                                <div className='flex flex-wrap items-center justify-center mt-4'>
+                                  <button type="button"
+                                    onClick={
+                                      () => uploadProductDirect()}
+                                    disabled={!termsChecked || infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] disabled:opacity-20 w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </motion.div>
+                              {showMessageRef.current == false ? '' :
+                                <motion.div className={`absolute w-1/2 h-auto p-4 rounded-xl z-50 flex flex-col flex-wrap items-center justify-center gap-2 ${messageRef.current.status === 'success' ? 'bg-[#388445]' : 'bg-[#ff5555]'}`}>
+                                  <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-white'>{messageRef.current.status === 'success' ? '¡Success!' : '¡Oops!'}</h2>
+                                  <p className='text-center text-white'>{messageRef.current.text}</p>
+                                  <CustomLink
+                                    type='filled'
+                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm'
+                                  />
+                                </motion.div>
+                              }
+                          </>
+                        )}
+                    </>
+                  )}
                   </>
                 )}
                 {snap.step3 && snap.step3Text && (
                   <>
-                    {!user && (
-                      ''
-                    )}
-                    {user && (
-                      <>
+                  {!user && (
+                    ''
+                  )}
+                  {user && paypalIsActiveRef.current === false && (
+                    <>
                         {!formSubmitted ? (
                           <>
                             <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Text = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
                             <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <form onSubmit={handleSubmit2((data) => onSubmit(data, 'text'))} className="space-y-4 mt-10">
-                              <label className="block">
-                                <span className="text-white">What's the title of your product?</span>
-                                <input {...register2('title')} disabled={infoLoading} placeholder="Story of a XXII century robot superhero" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
-                              </label>
-                              {errors2.title && <span className='text-yellow-300 italic'>This field is required</span>}
+                              <form onSubmit={handleSubmit2((data) => onSubmit(data, 'text'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-white">What's the title of your product?</span>
+                                  <input {...register2('title', { required: true })} disabled={infoLoading} placeholder="Story of a XXII century robot superhero" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors2.title && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">Write a brief and cool description of your product</span>
-                                <textarea {...register2('desc')} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
-                              </label>
-                              {errors2.desc && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-white">Write a brief and cool description of your product</span>
+                                  <textarea {...register2('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors2.desc && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
-                                <input {...register2('thumbnail', { validate: file => file && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'text')} />
-                              </label>
-                              {errors2.thumbnail && <span className='text-yellow-300 italic'>Invalid file</span>}
-                              {textThumbnailPreview && <img src={textThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+                                <label className="block">
+                                  <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register2('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'text')} />
+                                </label>
+                                {errors2.thumbnail?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors2.thumbnail?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid file</span>}
+                                {textThumbnailPreview && <img src={textThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-white rounded' />}
 
-                              <label className="block">
-                                <span className="text-white">Upload a PDF or a compressed folder with the text your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF or ZIP, RAR, max 50MB)</span></span>
-                                <input {...register2('product', { validate: file => file && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
-                              </label>
-                              {errors2.product && <span className='text-yellow-300 italic'>Invalid product</span>}
+                                <label className="block">
+                                  <span className="text-white">Upload a PDF or a compressed folder with the text your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register2('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.pdf') || file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".pdf,.zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors2.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors2.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
 
-                              <label className="block">
-                                <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
-                                <input {...register2('price')} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
-                              </label>
-                              {errors2.price && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register2('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors2.price && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">What AI have you used for this product?</span>
-                                <input {...register2('ai')} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
-                              </label>
-                              {errors2.ai && <span className='text-yellow-300 italic'>This field is required</span>}
-
-                              <label className="flex items-center justify-center space-x-2">
-                                <input {...register2('terms', { required: true })} disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" />
-                                <span className="text-white">I agree to the terms of service</span>
-                              </label>
-                              {errors2.terms && <span className='text-yellow-300 italic'>This field is required</span>}
-
-                              <div className='flex flex-wrap items-center justify-center'>
-                                <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
-                                  {infoLoading ? <ClipLoader color={snap.color} /> : 'Submit'}
-                                </button>
-                              </div>
-                            </form>
+                                <label className="block">
+                                  <span className="text-white">What AI have you used for this product?</span>
+                                  <input {...register2('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors2.ai && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
                             </motion.div>
                           </>
                         ) : (
-                          <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <div className='md:max-w-[75%] max-w-[90%] m-auto'>
-                              <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>Success!</h2>
-                              <p className='w-full font-normal text-gray-200 text-base text-center mt-2 mb-4'>
-                                You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
-                                Check the info of the product you've just submitted:
-                              </p>
-                              <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
-                                <div className='relative max-w-full md:max-w-[350px] m-auto'>
-                                  <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
-                                  <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                    <p className="font-semibold uppercase">{preview.ai}</p>
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                              <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-white">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                      <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
                                   </div>
-                                  <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
-                                    <p className="font-bold text-white">${preview.price}</p>
-                                  </div>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, you have to integrate your PayPal account using the button below to be able to receive the funds of your sales. <br></br> Once you complete the PayPal login process, your product will be automatically send to review. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-white">I agree to the terms of service</span>
+                                  </label>
                                 </div>
-                                <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
-                                  <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
-                                  <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                <div className='flex flex-wrap items-center justify-center mt-4'>
+                                  <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL}`}>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-[#0070BA]'/> Continue with PayPal</>}</button>
                                 </div>
-                              </div>
-                            </div>
-                            <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
-                            <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
-                            </div>
-                          </motion.div>
+                              </motion.div>
+                          </>
                         )}
-                      </>
-                    )}
+                    </>
+                  )}
+                  {user && paypalIsActiveRef.current === true && (
+                    <>
+                        {!formSubmitted ? (
+                          <>
+                            <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Text = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                            <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                              <form onSubmit={handleSubmit2((data) => onSubmit(data, 'text'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-white">What's the title of your product?</span>
+                                  <input {...register2('title', { required: true })} disabled={infoLoading} placeholder="Story of a XXII century robot superhero" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors2.title && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Write a brief and cool description of your product</span>
+                                  <textarea {...register2('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="In the 22nd century, a robotic superhero battles for justice and humanity, weaving an epic tale of courage, hope, and technology." className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors2.desc && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register2('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'text')} />
+                                </label>
+                                {errors2.thumbnail?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors2.thumbnail?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid file</span>}
+                                {textThumbnailPreview && <img src={textThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-white rounded' />}
+
+                                <label className="block">
+                                  <span className="text-white">Upload a PDF or a compressed folder with the text your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register2('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.pdf') || file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".pdf,.zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors2.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors2.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register2('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors2.price && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">What AI have you used for this product?</span>
+                                  <input {...register2('ai', { required: true })} disabled={infoLoading} placeholder="Midjourney" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors2.ai && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
+                            </motion.div>
+                          </>
+                        ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                              <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-white">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                      <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, please read and agree to our terms of service. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-white">I agree to the terms of service</span>
+                                  </label>
+                                </div>
+                                <div className='flex flex-wrap items-center justify-center mt-4'>
+                                  <button type="button"
+                                    onClick={
+                                      () => uploadProductDirect()}
+                                    disabled={!termsChecked || infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] disabled:opacity-20 w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </motion.div>
+                              {showMessageRef.current == false ? '' :
+                                <motion.div className={`absolute w-1/2 h-auto p-4 rounded-xl z-50 flex flex-col flex-wrap items-center justify-center gap-2 ${messageRef.current.status === 'success' ? 'bg-[#388445]' : 'bg-[#ff5555]'}`}>
+                                  <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-white'>{messageRef.current.status === 'success' ? '¡Success!' : '¡Oops!'}</h2>
+                                  <p className='text-center text-white'>{messageRef.current.text}</p>
+                                  <CustomLink
+                                    type='filled'
+                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm'
+                                  />
+                                </motion.div>
+                              }
+                          </>
+                        )}
+                    </>
+                  )}
                   </>
                 )}
                 {snap.step3 && snap.step3Prompt && (
@@ -899,96 +1765,317 @@ export default function Sell() {
                     {!user && (
                       ''
                     )}
-                    {user && (
+                    {user && paypalIsActiveRef.current === false && (
                       <>
                         {!formSubmitted ? (
                           <>
-                            <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Prompt = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                          <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Prompt = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
                             <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <form onSubmit={handleSubmit3((data) => onSubmit(data, 'prompt'))} className="space-y-4 mt-10">
-                              <label className="block">
-                                <span className="text-white">What's the title of your product?</span>
-                                <input {...register3('title')} disabled={infoLoading} placeholder="Anime Illustrations" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
-                              </label>
-                              {errors3.title && <span className='text-yellow-300 italic'>This field is required</span>}
+                              <form onSubmit={handleSubmit3((data) => onSubmit(data, 'prompt'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-white">What's the title of your product?</span>
+                                  <input {...register3('title', { required: true })} disabled={infoLoading} placeholder="Anime Illustrations" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors3.title && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">Write a brief and cool description of your product</span>
-                                <textarea {...register3('desc')} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
-                              </label>
-                              {errors3.desc && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-white">Write a brief and cool description of your product</span>
+                                  <textarea {...register3('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors3.desc && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
-                                <input {...register3('thumbnail', { validate: file => file && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'prompt')} />
-                              </label>
-                              {errors3.thumbnail && <span className='text-yellow-300 italic'>Invalid file</span>}
-                              {promptThumbnailPreview && <img src={promptThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+                                <label className="block">
+                                  <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register3('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'prompt')} />
+                                </label>
+                                {errors3.thumbnail?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors3.thumbnail?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid file</span>}
+                                {promptThumbnailPreview && <img src={promptThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
 
-                              <label className="block">
-                                <span className="text-white">Upload a .PDF or .TXT file or a compressed folder with the prompt your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF, TXT or ZIP, RAR, max 50MB)</span></span>
-                                <input {...register3('product', { validate: file => file && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024 })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
-                              </label>
-                              {errors3.product && <span className='text-yellow-300 italic'>Invalid product</span>}
+                                <label className="block">
+                                  <span className="text-white">Upload a .PDF or .TXT file or a compressed folder with the prompt your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF, TXT or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register3('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors3.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors3.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
 
-                              <label className="block">
-                                <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
-                                <input {...register3('price')} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
-                              </label>
-                              {errors3.price && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <label className="block">
+                                  <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register3('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors3.price && <span className='text-yellow-300 italic'>This field is required</span>}
 
-                              <label className="block">
-                                <span className="text-white">What AI is this product for?</span>
-                                <input {...register3('ai')} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
-                              </label>
-                              {errors3.ai && <span className='text-yellow-300 italic'>This field is required</span>}
-
-                              <label className="flex items-center justify-center space-x-2">
-                                <input {...register3('terms', { required: true })} disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" />
-                                <span className="text-white">I agree to the terms of service</span>
-                              </label>
-                              {errors3.terms && <span className='text-yellow-300 italic'>This field is required</span>}
-
-                              <div className='flex flex-wrap items-center justify-center'>
-                                <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
-                                  {infoLoading ? <ClipLoader color={snap.color} /> : 'Submit'}
-                                </button>
-                              </div>
-                            </form>
+                                <label className="block">
+                                  <span className="text-white">What AI is this product for?</span>
+                                  <input {...register3('ai', { required: true })} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors3.ai && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
                             </motion.div>
                           </>
                         ) : (
-                          <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
-                            <div className='md:max-w-[75%] max-w-[90%] m-auto'>
-                              <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>Success!</h2>
-                              <p className='w-full font-normal text-gray-200 text-base text-center mt-2 mb-4'>
-                                You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
-                                Check the info of the product you've just submitted:
-                              </p>
-                              <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
-                                <div className='relative max-w-full md:max-w-[350px] m-auto'>
-                                  <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
-                                  <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                    <p className="font-semibold uppercase">{preview.ai}</p>
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                              <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-white">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                      <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
                                   </div>
-                                  <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
-                                    <p className="font-bold text-white">${preview.price}</p>
-                                  </div>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, you have to integrate your PayPal account using the button below to be able to receive the funds of your sales. <br></br> Once you complete the PayPal login process, your product will be automatically send to review. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-white">I agree to the terms of service</span>
+                                  </label>
                                 </div>
-                                <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
-                                  <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
-                                  <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                <div className='flex flex-wrap items-center justify-center mt-4'>
+                                  <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => uploadProduct()}>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-[#0070BA]'/> Continue with PayPal</>}</button>
                                 </div>
-                              </div>
-                            </div>
-                            <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
-                            <div className='flex flex-wrap items-center justify-center mt-4'>
-                              <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
-                            </div>
-                          </motion.div>
+                              </motion.div>
+                          </>
                         )}
                       </>
                     )}
+                    {user && paypalIsActiveRef.current === true && (
+                      <>
+                        {!formSubmitted ? (
+                          <>
+                          <FaArrowLeft onClick={() => (state.step2 = true) && (state.step3Prompt = false) && (state.step3 = false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[25%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                            <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                              <form onSubmit={handleSubmit3((data) => onSubmit(data, 'prompt'))} className="space-y-4 mt-10">
+                                <label className="block">
+                                  <span className="text-white">What's the title of your product?</span>
+                                  <input {...register3('title', { required: true })} disabled={infoLoading} placeholder="Anime Illustrations" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="60" />
+                                </label>
+                                {errors3.title && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Write a brief and cool description of your product</span>
+                                  <textarea {...register3('desc', { required: true })} disabled={infoLoading} rows={3} placeholder="This prompt will generate an illustration in the style of Anime, which is totally settable!" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="480" />
+                                </label>
+                                {errors3.desc && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Upload a thumbnail to show potential buyers what your product is about <br></br> <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 5MB)</span></span>
+                                  <input {...register3('thumbnail', {
+                                    required: true,
+                                    validate: file => file && file[0] && file[0].type.includes('image/') && file[0].size <= 5 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".png,.jpg,.jpeg,.webp,.avif" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" onChange={(e) => onThumbnailChange(e, 'prompt')} />
+                                </label>
+                                {errors3.thumbnail?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors3.thumbnail?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid file</span>}
+                                {promptThumbnailPreview && <img src={promptThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
+
+                                <label className="block">
+                                  <span className="text-white">Upload a .PDF or .TXT file or a compressed folder with the prompt your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(PDF, TXT or ZIP, RAR, max 50MB)</span></span>
+                                  <input {...register3('product', {
+                                    required: true,
+                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors3.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors3.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
+
+                                <label className="block">
+                                  <span className="text-white">Set the price of your product <span className="text-sm italic text-gray-400">(In US Dollars)</span></span>
+                                  <input {...register3('price', { required: true })} disabled={infoLoading} type="number" min="0" step="0.01" placeholder="4.99" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                </label>
+                                {errors3.price && <span className='text-yellow-300 italic'>This field is required</span>}
+
+                                <label className="block">
+                                  <span className="text-white">What AI is this product for?</span>
+                                  <input {...register3('ai', { required: true })} disabled={infoLoading} placeholder="GPT-4" autoComplete="off" className="disabled:opacity-25 disabled:grayscale placeholder:text-sm mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" maxLength="25" />
+                                </label>
+                                {errors3.ai && <span className='text-yellow-300 italic'>This field is required</span>}
+                                <div className='flex flex-wrap items-center justify-center'>
+                                  <button type="submit" disabled={infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </form>
+                            </motion.div>
+                          </>
+                        ) : (
+                          <>
+                          <FaArrowLeft onClick={() => setFormSubmitted(false)} size={30} className='absolute md:top-[18%] top-[25%] md:left-[20%] md:right-0 right-[5%] cursor-pointer text-white hover:text-[#04E762] transition-all ease-in-out' />
+                              <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                                <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                                  <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>One last step!</h2>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    This is how your product will be visible on the marketplace once it gets approved.
+                                  </p>
+                                  <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                                    <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                                      <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                                      <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                                        <p className="font-semibold uppercase">{preview.ai}</p>
+                                      </div>
+                                      <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                                        <p className="font-bold text-white">${preview.price}</p>
+                                      </div>
+                                    </div>
+                                    <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                                      <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                                      <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                                    </div>
+                                  </div>
+                                  <p className='w-full font-normal text-gray-300 text-base text-center mt-2 mb-4'>
+                                    Before sending it for approval, please read and agree to our terms of service. <br></br> You'll receive an email once your product gets approved or rejected.
+                                  </p>
+                                  <label className="flex items-center justify-center space-x-2">
+                                    <input required disabled={infoLoading} type="checkbox" className="disabled:opacity-25 disabled:grayscale form-checkbox h-5 w-5 text-[#04E762]" onChange={handleCheckboxChange} />
+                                    <span className="text-white">I agree to the terms of service</span>
+                                  </label>
+                                </div>
+                                <div className='flex flex-wrap items-center justify-center mt-4'>
+                                  <button type="button"
+                                    onClick={
+                                      () => uploadProductDirect()}
+                                    disabled={!termsChecked || infoLoading} className={`px-4 py-2.5 flex-1 rounded-md border border-[#04E762] bg-transparent text-[#04E762] md:max-w-[170px] disabled:opacity-20 w-fit font-bold text-sm`}>
+                                    {infoLoading ? <ClipLoader /> : 'Continue'}
+                                  </button>
+                                </div>
+                              </motion.div>
+                              {showMessageRef.current == false ? '' :
+                                <motion.div className={`absolute w-1/2 h-auto p-4 rounded-xl z-50 flex flex-col flex-wrap items-center justify-center gap-2 ${messageRef.current.status === 'success' ? 'bg-[#388445]' : 'bg-[#ff5555]'}`}>
+                                  <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-white'>{messageRef.current.status === 'success' ? '¡Success!' : '¡Oops!'}</h2>
+                                  <p className='text-center text-white'>{messageRef.current.text}</p>
+                                  <CustomLink
+                                    type='filled'
+                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm'
+                                  />
+                                </motion.div>
+                              }
+                          </>
+                        )}
+                      </>
+                    )}
+                  </>
+                )}
+                {snap.step4 && snap.step4Image && (
+                  <>
+                    <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                      <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                        <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>Success!</h2>
+                        <p className='w-full font-normal text-gray-200 text-base text-center mt-2 mb-4'>
+                          You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
+                          Check the info of the product you've just submitted:
+                        </p>
+                        <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                          <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                            <img src={imageThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                            <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                              <p className="font-semibold uppercase">{preview.ai}</p>
+                            </div>
+                            <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                              <p className="font-bold text-white">${preview.price}</p>
+                            </div>
+                          </div>
+                          <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                            <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                            <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
+                      <div className='flex flex-wrap items-center justify-center mt-4'>
+                        <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+                {snap.step4 && snap.step4Text && (
+                  <>
+                    <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                      <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                        <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>Success!</h2>
+                        <p className='w-full font-normal text-gray-200 text-base text-center mt-2 mb-4'>
+                          You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
+                          Check the info of the product you've just submitted:
+                        </p>
+                        <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                          <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                            <img src={textThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                            <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                              <p className="font-semibold uppercase">{preview.ai}</p>
+                            </div>
+                            <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                              <p className="font-bold text-white">${preview.price}</p>
+                            </div>
+                          </div>
+                          <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                            <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                            <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
+                      <div className='flex flex-wrap items-center justify-center mt-4'>
+                        <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+                {snap.step4 && snap.step4Prompt && (
+                  <>
+                    <motion.div className='md:mt-0 mt-10' {...headContainerAnimation}>
+                      <div className='md:max-w-[75%] max-w-[90%] m-auto'>
+                        <h2 className='2xl:text-[4rem] text-[2rem] text-center font-black text-white'>Success!</h2>
+                        <p className='w-full font-normal text-gray-200 text-base text-center mt-2 mb-4'>
+                          You've just submitted your product! <br></br> Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. <br></br><br></br>
+                          Check the info of the product you've just submitted:
+                        </p>
+                        <div className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
+                          <div className='relative max-w-full md:max-w-[350px] m-auto'>
+                            <img src={promptThumbnailPreview} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
+                            <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
+                              <p className="font-semibold uppercase">{preview.ai}</p>
+                            </div>
+                            <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
+                              <p className="font-bold text-white">${preview.price}</p>
+                            </div>
+                          </div>
+                          <div className='pt-2 md:pt-4 border rounded-b-md bg-[#04E762] border-[#04E762] max-w-full md:max-w-[400px] m-auto px-2 md:px-4 py-1.5 md:py-2.5'>
+                            <h3 className='capitalize text-base md:text-lg font-bold text-black truncate'>{preview.title}</h3>
+                            <p className='italic text-black text-xs md:text-sm line-clamp-3'>{preview.desc}</p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
+                      <div className='flex flex-wrap items-center justify-center mt-4'>
+                        <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                      </div>
+                    </motion.div>
                   </>
                 )}
               </motion.div>

@@ -8,8 +8,8 @@ import Head from 'next/head';
 import ClipLoader from "react-spinners/ClipLoader";
 import { useForm } from 'react-hook-form';
 
-import { IoMdMoon, IoMdSunny } from 'react-icons/io'
-import { FaArrowLeft, FaImage, FaRobot, FaTrash, FaDownload } from 'react-icons/fa'
+import { IoMdMoon, IoMdSunny, IoMdWarning } from 'react-icons/io'
+import { FaArrowLeft, FaImage, FaRobot, FaTrash, FaDownload, FaPaypal } from 'react-icons/fa'
 import { FiFileText } from 'react-icons/fi'
 import Moment from 'react-moment';
 
@@ -17,8 +17,8 @@ import state from '../../store'
 
 // Firebase libraries and your db configuration
 import { doc, getDoc, getDocs, updateDoc, deleteDoc, collection, collectionGroup, query, where } from "firebase/firestore";
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { updateProfile, updateEmail, updatePassword } from "firebase/auth";
+import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject, listAll } from "firebase/storage";
+import { updateProfile, updateEmail, updatePassword, deleteUser, reauthenticateWithPopup, GoogleAuthProvider } from "firebase/auth";
 
 import { db, auth } from '../../firebase';
 
@@ -66,8 +66,6 @@ const Dashboard = (props) => {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             setUserData(docSnap.data());
-          } else {
-            console.log('No such document!');
           }
         }
         fetchUserData();
@@ -134,282 +132,279 @@ const Dashboard = (props) => {
     }
   
 
-  // The states will hold the currently input values for each input field
-  const [description, setDescription] = useState(props.user.description);
-  const [email, setEmail] = useState(props.user.email);
-  const [name, setName] = useState(props.user.name);
-  const [username, setUsername] = useState(props.user.username);
-  const [profileBg, setProfileBg] = useState(props.user.profileBg);
-  const [profilePic, setProfilePic] = useState(props.user.profilePic);
-  const [profileBgPreview, setProfileBgPreview] = useState(profileBg);
-  const [profilePicPreview, setProfilePicPreview] = useState(profilePic);
-  // Add URLs to useState, initializing from props
-  const [URLs, setURLs] = useState({
-    websiteURL: props.user.websiteURL || '',
-    instagramURL: props.user.instagramURL || '',
-    facebookURL: props.user.facebookURL || '',
-    twitterURL: props.user.twitterURL || '',
-    linkedinURL: props.user.linkedinURL || '',
-    tumblrURL: props.user.tumblrURL || '',
-    pinterestURL: props.user.pinterestURL || '',
-    githubURL: props.user.githubURL || '',
-    dribbbleURL: props.user.dribbbleURL || '',
-    behanceURL: props.user.behanceURL || ''
-  });
-
-  const handleDescriptionChange = (event) => setDescription(event.target.value);
-  const handleEmailChange = (event) => setEmail(event.target.value);
-  const handleNameChange = (event) => setName(event.target.value);
-  const handleUsernameChange = (event) => setUsername(event.target.value);
-
-  // Function to handle URL input changes
-  const handleURLChange = (event) => {
-    setURLs({
-      ...URLs,
-      [event.target.name]: event.target.value
+    const [description, setDescription] = useState(props.user.description);
+    const [email, setEmail] = useState(props.user.email);
+    const [paypalEmail, setPaypalEmail] = useState(props.user.paypalEmail)
+    const [name, setName] = useState(props.user.name);
+    const [username, setUsername] = useState(props.user.username);
+    const [profileBg, setProfileBg] = useState(props.user.profileBg);
+    const [profilePic, setProfilePic] = useState(props.user.profilePic);
+    const [profileBgPreview, setProfileBgPreview] = useState(profileBg);
+    const [profilePicPreview, setProfilePicPreview] = useState(profilePic);
+    const [URLs, setURLs] = useState({
+      websiteURL: props.user.websiteURL || '',
+      instagramURL: props.user.instagramURL || '',
+      facebookURL: props.user.facebookURL || '',
+      twitterURL: props.user.twitterURL || '',
+      linkedinURL: props.user.linkedinURL || '',
+      tumblrURL: props.user.tumblrURL || '',
+      pinterestURL: props.user.pinterestURL || '',
+      githubURL: props.user.githubURL || '',
+      dribbbleURL: props.user.dribbbleURL || '',
+      behanceURL: props.user.behanceURL || ''
     });
-  };
-
-  if (loading || !user || user.uid !== props.user.id) {
-    return <div className='m-auto w-[100px] min-h-screen flex  items-center justify-center mt-20 mb-20'><ClipLoader size={50} color={'#04E762'} /></div>;
-  }
-
-  const handleTabClick = (tab) => {
-    setActiveTab(tab);
-    // Here you would handle what to do when each tab is clicked
-  };
-
-  const handleProfilePicChange = async (event) => {
-    let selectedFile = event.target.files[0];
-
-    if (selectedFile) {
-      if (selectedFile.type === 'image/png' || selectedFile.type === 'image/jpeg') {
-        if (selectedFile.size <= 5000000) { // 5 MB in bytes
-          const storage = getStorage();
-          const storageRef = ref(storage, `users/${user.uid}/profile-pics/profilepic`);
-          const uploadTask = uploadBytesResumable(storageRef, selectedFile);
-
-          uploadTask.on('state_changed', 
-            (snapshot) => {
-              // Progress function...
-            }, 
-            (error) => {
-              // Error function...
-              console.log(error);
-            }, 
-            () => {
-              // Complete function...
-              getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-                setProfilePic(downloadURL);
-                setProfilePicPreview(downloadURL);
-              });
-            }
-          );
-        } else {
-          alert("File is too big!");
-        }
-      } else {
-        alert("File type not supported!");
-      }
-    }
-  };
-
-  const handleProfileBgChange = async (event) => {
-    let selectedFile = event.target.files[0];
-
-    if (selectedFile) {
-      if (selectedFile.type === 'image/png' || selectedFile.type === 'image/jpeg') {
-        if (selectedFile.size <= 5000000) { // 5 MB in bytes
-          const storage = getStorage();
-          const storageRef = ref(storage, `users/${user.uid}/backgrounds/profilebg`);
-          const uploadTask = uploadBytesResumable(storageRef, selectedFile);
-
-          uploadTask.on('state_changed', 
-            (snapshot) => {
-              // Progress function...
-            }, 
-            (error) => {
-              // Error function...
-              console.log(error);
-            }, 
-            () => {
-              // Complete function...
-              getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-                setProfileBg(downloadURL);
-                setProfileBgPreview(downloadURL);
-              });
-            }
-          );
-        } else {
-          alert("File is too big!");
-        }
-      } else {
-        alert("File type not supported!");
-      }
-    }
-  };
-
-  const onSubmit = async (data) => {
-    data = {
-      ...data,
-      ...URLs,
-      profileBg,
-      profilePic,
+  
+    const handleDescriptionChange = (event) => setDescription(event.target.value);
+    const handleEmailChange = (event) => setEmail(event.target.value);
+    const handleNameChange = (event) => setName(event.target.value);
+    const handleUsernameChange = (event) => setUsername(event.target.value);
+  
+    const handleURLChange = (event) => {
+      setURLs({
+        ...URLs,
+        [event.target.name]: event.target.value
+      });
     };
   
-    setIsLoading(true);
+    if (loading || !user || user.uid !== props.user.id) {
+      return <div className='m-auto w-[100px] min-h-screen flex  items-center justify-center mt-20 mb-20'><ClipLoader size={50} color={'#04E762'} /></div>;
+    }
   
-    // Updating email
-    if (auth.currentUser && data.email !== auth.currentUser.email) {
-      await updateEmail(auth.currentUser, data.email)
-        .then(() => {
-          console.log("Email successfully updated!");
+    const handleTabClick = (tab) => {
+      setActiveTab(tab);
+    };
+  
+    const handleProfilePicChange = async (event) => {
+      let selectedFile = event.target.files[0];
+  
+      if (selectedFile) {
+        if (selectedFile.type === 'image/png' || selectedFile.type === 'image/jpeg') {
+          if (selectedFile.size <= 5000000) { // 5 MB in bytes
+            const storage = getStorage();
+            const storageRef = ref(storage, `users/${user.uid}/profile-pics/profilepic`);
+            const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+  
+            uploadTask.on('state_changed', 
+              (snapshot) => {}, 
+              (error) => {}, 
+              () => {
+                getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+                  setProfilePic(downloadURL);
+                  setProfilePicPreview(downloadURL);
+                });
+              }
+            );
+          } 
+        } 
+      }
+    };
+  
+    const handleProfileBgChange = async (event) => {
+      let selectedFile = event.target.files[0];
+  
+      if (selectedFile) {
+        if (selectedFile.type === 'image/png' || selectedFile.type === 'image/jpeg') {
+          if (selectedFile.size <= 5000000) { // 5 MB in bytes
+            const storage = getStorage();
+            const storageRef = ref(storage, `users/${user.uid}/backgrounds/profilebg`);
+            const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+  
+            uploadTask.on('state_changed', 
+              (snapshot) => {}, 
+              (error) => {}, 
+              () => {
+                getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+                  setProfileBg(downloadURL);
+                  setProfileBgPreview(downloadURL);
+                });
+              }
+            );
+          } 
+        } 
+      }
+    };
+
+    const onSubmit = async (data) => {
+      data = {
+        ...data,
+        ...URLs,
+        profileBg,
+        profilePic,
+      };
+    
+      setIsLoading(true);
+    
+      if (auth.currentUser && data.email !== auth.currentUser.email) {
+        await updateEmail(auth.currentUser, data.email).catch(() => {});
+      }
+    
+      await updateDoc(doc(db, 'users', user.uid), data).catch(() => {});
+    
+      await updateProfile(auth.currentUser, {
+          displayName: data.name,
+          photoURL: data.profilePic,
+      })
+      .then(() => {
+        router.reload();
+      })
+      .catch(() => {});
+    
+      setIsLoading(false);
+    };
+
+    const deleteSubmittedProduct = async () => {
+      if (!submittedProductToDelete) return;
+    
+      let submittedProductRef;
+    
+      switch(submittedProductToDelete.parentCollection) {
+        case 'images':
+          submittedProductRef = doc(db, 'images', props.user.uid, 'submitted', submittedProductToDelete.id);
+          break;
+        case 'texts':
+          submittedProductRef = doc(db, 'texts', props.user.uid, 'submitted', submittedProductToDelete.id);
+          break;
+        case 'prompts':
+          submittedProductRef = doc(db, 'prompts', props.user.uid, 'submitted', submittedProductToDelete.id);
+          break;
+        default:
+          return;
+      }
+    
+      await deleteDoc(submittedProductRef).catch(() => {});
+    
+      const searchIndexRef = doc(db, 'search_index', `${props.user.uid}_${submittedProductToDelete.id}`);
+      await deleteDoc(searchIndexRef).catch(() => {});
+    
+      fetchProducts();
+    
+      setShowSubmittedModal(false);
+      setSubmittedProductToDelete(null);
+    };
+
+    const deleteApprovedProduct = async () => {
+      if (!approvedProductToDelete) return;
+    
+      let approvedProductRef;
+    
+      switch(approvedProductToDelete.parentCollection) {
+        case 'images':
+          approvedProductRef = doc(db, 'images', props.user.uid, 'approved', approvedProductToDelete.id);
+          break;
+        case 'texts':
+          approvedProductRef = doc(db, 'texts', props.user.uid, 'approved', approvedProductToDelete.id);
+          break;
+        case 'prompts':
+          approvedProductRef = doc(db, 'prompts', props.user.uid, 'approved', approvedProductToDelete.id);
+          break;
+        default:
+          return;
+      }
+    
+      await deleteDoc(approvedProductRef).catch(() => {});
+    
+      const searchIndexRef = doc(db, 'search_index', `${props.user.uid}_${approvedProductToDelete.id}`);
+      await deleteDoc(searchIndexRef).catch(() => {});
+    
+      fetchProducts();
+    
+      setShowApprovedModal(false);
+      setApprovedProductToDelete(null);
+    };
+    
+    const handleSubmittedDeleteClick = (product) => {
+      setSubmittedProductToDelete(product);
+      setShowSubmittedModal(true);
+    };
+    
+    const handleApprovedDeleteClick = (product) => {
+      setApprovedProductToDelete(product);
+      setShowApprovedModal(true);
+    };
+    
+    const downloadProduct = async (product) => {
+      const storage = getStorage();
+      const productRef = ref(storage, product.productURL);
+    
+      getDownloadURL(productRef)
+        .then((url) => {
+          const xhr = new XMLHttpRequest();
+          xhr.responseType = 'blob';
+          xhr.onload = (event) => {
+            const blob = xhr.response;
+            saveAs(blob, product.title);
+          };
+          xhr.open('GET', url);
+          xhr.send();
         })
-        .catch((error) => {
-          console.error("Error updating email: ", error);
-        });
-    }
-  
-    await updateDoc(doc(db, 'users', user.uid), data)
-      .then(() => {
-        console.log("Document successfully updated!");
-      })
-      .catch((error) => {
-        console.error("Error updating document: ", error);
-      });
-  
-    // Updating firebase auth profile
-    await updateProfile(auth.currentUser, {
-        displayName: data.name,
-        photoURL: data.profilePic,
-    })
-    .then(() => {
-      // Reload the page after all updates are successful
-      router.reload();
-    })
-    .catch((error) => {
-      console.error("Error updating profile: ", error);
-    });
-  
-    setIsLoading(false);
-  };
+        .catch(() => {});
+    };
 
-  const deleteSubmittedProduct = async () => {
-    if (!submittedProductToDelete) return;
-  
-    let submittedProductRef;
-  
-    switch(submittedProductToDelete.parentCollection) {
-      case 'images':
-        submittedProductRef = doc(db, 'images', props.user.uid, 'submitted', submittedProductToDelete.id);
-        break;
-      case 'texts':
-        submittedProductRef = doc(db, 'texts', props.user.uid, 'submitted', submittedProductToDelete.id);
-        break;
-      case 'prompts':
-        submittedProductRef = doc(db, 'prompts', props.user.uid, 'submitted', submittedProductToDelete.id);
-        break;
-      default:
-        console.log('Unknown parent collection');
-        return;
-    }
-  
-    // Delete product from 'submitted' subcollection
-    await deleteDoc(submittedProductRef)
-      .then(() => {
-        console.log("Document successfully deleted from submitted!");
-      })
-      .catch((error) => console.error("Error removing document from submitted: ", error));
-
-    // Delete product from 'search_index' collection
-    const searchIndexRef = doc(db, 'search_index', `${props.user.uid}_${submittedProductToDelete.id}`);
-    await deleteDoc(searchIndexRef)
-      .then(() => {
-        console.log("Document successfully deleted from search_index!");
-      })
-      .catch((error) => console.error("Error removing document from search_index: ", error));
+    const deleteUserData = async (userId) => {
+      const storage = getStorage();
     
-    // Fetch the data again
-    fetchProducts();
-  
-    // Close the modal and unset the product to delete
-    setShowSubmittedModal(false);
-    setSubmittedProductToDelete(null);
+      const mainCollections = ['images', 'prompts', 'texts'];
+      const subcollections = ['approved', 'rejected', 'submitted', 'purchases', 'sales'];
+    
+      try {
+        const provider = new GoogleAuthProvider();
+        const reauthResult = await reauthenticateWithPopup(auth.currentUser, provider);
+        
+        if(reauthResult.user) {
+          for (let coll of mainCollections) {
+            for (let subcoll of subcollections) {
+              const q = query(collection(db, `${coll}/${userId}/${subcoll}`));
+              const querySnapshot = await getDocs(q);
+              querySnapshot.forEach((docu) => {
+                let docReference = doc(db, `${coll}/${userId}/${subcoll}`, docu.id)
+                deleteDoc(docReference);
+              });
+            }
+            let mainDocReference = doc(db, `${coll}/${userId}`)
+            await deleteDoc(mainDocReference);
+          }
+    
+          for (let subcoll of ['purchases', 'sales']) {
+            const q = query(collection(db, `users/${userId}/${subcoll}`));
+            const querySnapshot = await getDocs(q);
+            querySnapshot.forEach((docu) => {
+              let docReference = doc(db, `users/${userId}/${subcoll}`, docu.id)
+              deleteDoc(docReference);
+            });
+          }
+    
+          await deleteDoc(doc(db, 'users', userId));
+    
+          const user = auth.currentUser;
+          if (user) {
+            await deleteUser(user);
+          }
+    
+          const folders = ['backgrounds', 'profile-pics'];
+          for (let folder of folders) {
+            try {
+              const listRef = ref(storage, `users/${userId}/${folder}`);
+              const res = await listAll(listRef);
+              res.items.forEach((itemRef) => {
+                deleteObject(itemRef);
+              });
+            } catch (error) {}
+          }
+    
+          router.push('/');
+        }
+      } catch (error) {}
   };
-
-  const deleteApprovedProduct = async () => {
-    if (!approvedProductToDelete) return;
   
-    let approvedProductRef;
-  
-    switch(approvedProductToDelete.parentCollection) {
-      case 'images':
-        approvedProductRef = doc(db, 'images', props.user.uid, 'approved', approvedProductToDelete.id);
-        break;
-      case 'texts':
-        approvedProductRef = doc(db, 'texts', props.user.uid, 'approved', approvedProductToDelete.id);
-        break;
-      case 'prompts':
-        approvedProductRef = doc(db, 'prompts', props.user.uid, 'approved', approvedProductToDelete.id);
-        break;
-      default:
-        console.log('Unknown parent collection');
-        return;
+  const handleDeleteAccount = () => {
+    const confirmDelete = window.confirm('Are you sure you want to delete your account? This action is irreversible.');
+    
+    if (confirmDelete) {
+      const userId = props.user.uid;
+    
+      deleteUserData(userId);
     }
-  
-    // Delete product from 'approved' subcollection
-    await deleteDoc(approvedProductRef)
-      .then(() => {
-        console.log("Document successfully deleted from approved!");
-      })
-      .catch((error) => console.error("Error removing document from approved: ", error));
-  
-    // Delete product from 'search_index' collection
-    const searchIndexRef = doc(db, 'search_index', `${props.user.uid}_${approvedProductToDelete.id}`);
-    await deleteDoc(searchIndexRef)
-      .then(() => {
-        console.log("Document successfully deleted from search_index!");
-      })
-      .catch((error) => console.error("Error removing document from search_index: ", error));
-    
-    // Fetch the data again
-    fetchProducts();
-    
-    // Close the modal and unset the product to delete
-    setShowApprovedModal(false);
-    setApprovedProductToDelete(null);
-  };
-
-  const handleSubmittedDeleteClick = (product) => {
-    setSubmittedProductToDelete(product);
-    setShowSubmittedModal(true);
-  };
-
-  const handleApprovedDeleteClick = (product) => {
-    setApprovedProductToDelete(product);
-    setShowApprovedModal(true);
-  };
-
-  const downloadProduct = async (product) => {
-    const storage = getStorage();
-    const productRef = ref(storage, product.productURL);
-  
-    getDownloadURL(productRef)
-      .then((url) => {
-        const xhr = new XMLHttpRequest();
-        xhr.responseType = 'blob';
-        xhr.onload = (event) => {
-          const blob = xhr.response;
-          saveAs(blob, product.title); // where 'product.title' is the name you want to give to the downloaded file
-        };
-        xhr.open('GET', url);
-        xhr.send();
-      })
-      .catch((error) => {
-          console.error("Error downloading the file: ", error);
-      });
-  };
-
+  }
 
   return (
     <AnimatePresence>
@@ -543,6 +538,29 @@ const Dashboard = (props) => {
                               </button>
                               </div>
                           </form>
+                          <h3 className="2xl:text-2xl text-xl font-black text-black text-center capitalize transition-colors ease-in-out mt-8">Connected Payment Accounts</h3>
+                          <p className='text-center'>Check the accounts you've vinculated with your account to receive payments of your products.</p>
+                          <div className='flex flex-wrap items-end justify-center gap-4'>
+                          <label className="block md:w-[35%] w-full">
+                                <span className="text-black">Paypal Email</span>
+                                <input
+                                  type="text"
+                                  value={paypalEmail}
+                                  disabled
+                                  placeholder="Not account integrated yet"
+                                  className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out"
+                                />
+                          </label>
+                          <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
+                            Change Account
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL}`}><FaPaypal size={25} className='text-[#fff]'/>Continue with PayPal</button>
+                          </div>
+                          </div>
+                          <h3 className="2xl:text-2xl text-xl font-black text-black text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
+                          <div className='flex flex-col flex-wrap items-center justify-center gap-2 bg-gray-900 mt-4 py-4 rounded'>
+                            <p className='text-lg text-white flex flex-wrap items-center justify-center gap-1 max-w-[85%] lg:max-w-full mx-auto text-center'><span className='text-2xl text-yellow-400'><IoMdWarning /></span>Please consider this action is irreversible: you will lose access to all your purchases, products and info storaged in your account.</p>
+                            <button onClick={handleDeleteAccount} className={`px-4 py-2.5 mt-2 flex-1 rounded-md border border-red-500 bg-red-500 text-white md:max-w-[170px] w-fit font-bold text-sm`}>Delete My Account</button>
+                          </div>
                         </div>
                         : ''}
                         {activeTab == 'manage-products' ? 
@@ -557,7 +575,7 @@ const Dashboard = (props) => {
                                 <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                     <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                    <p className="font-semibold">{product.ai}</p>
+                                    <p className="font-semibold uppercase">{product.ai}</p>
                                     </div>
                                     <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                     <p className="font-bold text-black">${product.price}</p>
@@ -593,7 +611,7 @@ const Dashboard = (props) => {
                                 <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                     <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                    <p className="font-semibold">{product.ai}</p>
+                                    <p className="font-semibold uppercase">{product.ai}</p>
                                     </div>
                                     <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                     <p className="font-bold text-black">${product.price}</p>
@@ -633,7 +651,7 @@ const Dashboard = (props) => {
                                 <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                     <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                    <p className="font-semibold">{product.ai}</p>
+                                    <p className="font-semibold uppercase">{product.ai}</p>
                                     </div>
                                     <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                     <p className="font-bold text-black">${product.price}</p>
@@ -782,6 +800,29 @@ const Dashboard = (props) => {
                               </button>
                               </div>
                           </form>
+                          <h3 className="2xl:text-2xl text-xl font-black text-white text-center capitalize transition-colors ease-in-out mt-8">Connected Payment Accounts</h3>
+                          <p className='text-center text-white'>Check the accounts you've vinculated with your account to receive payments of your products.</p>
+                          <div className='flex flex-wrap items-end justify-center gap-4'>
+                          <label className="block md:w-[35%] w-full">
+                                <span className="text-white">Paypal Email</span>
+                                <input
+                                  type="text"
+                                  value={paypalEmail}
+                                  disabled
+                                  placeholder="Not account integrated yet"
+                                  className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out"
+                                />
+                          </label>
+                          <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
+                            <p className='text-white'>Change Account</p>
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL}`}><FaPaypal size={25} className='text-[#0070BA]'/>Continue with PayPal</button>
+                          </div>
+                          </div>
+                          <h3 className="2xl:text-2xl text-xl font-black text-white text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
+                          <div className='flex flex-col flex-wrap items-center justify-center gap-2 bg-white mt-4 py-4 rounded'>
+                            <p className='text-lg flex flex-wrap items-center justify-center gap-1 max-w-[85%] lg:max-w-full mx-auto text-center'><span className='text-2xl text-yellow-400'><IoMdWarning /></span>Please consider this action is irreversible: you will lose access to all your purchases, products and info storaged in your account.</p>
+                            <button onClick={handleDeleteAccount} className={`px-4 py-2.5 mt-2 flex-1 rounded-md border border-red-500 bg-red-500 text-white md:max-w-[170px] w-fit font-bold text-sm`}>Delete My Account</button>
+                          </div>
                         </div>
                         : ''}
                         {activeTab == 'manage-products' ? 
@@ -796,7 +837,7 @@ const Dashboard = (props) => {
                                   <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                     <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                      <p className="font-semibold">{product.ai}</p>
+                                      <p className="font-semibold uppercase">{product.ai}</p>
                                     </div>
                                     <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                       <p className="font-bold text-white">${product.price}</p>
@@ -832,7 +873,7 @@ const Dashboard = (props) => {
                                   <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                     <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                      <p className="font-semibold">{product.ai}</p>
+                                      <p className="font-semibold uppercase">{product.ai}</p>
                                     </div>
                                     <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                       <p className="font-bold text-white">${product.price}</p>
@@ -867,12 +908,12 @@ const Dashboard = (props) => {
                             {props.purchases.map((product, index) => (
                               <>
                               <div className='flex flex-col flex-wrap items-center justify-center'>
-                              <Link key={product.id} className='md:w-auto w-full mb-4' href={`/product/${product.publicID}`} target='_blank'>
+                              <div key={product.id} className='md:w-auto w-full mb-4'>
                                 <div key={index} className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
                                   <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                     <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                      <p className="font-semibold">{product.ai}</p>
+                                      <p className="font-semibold uppercase">{product.ai}</p>
                                     </div>
                                     <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                       <p className="font-bold text-white">${product.price}</p>
@@ -883,7 +924,7 @@ const Dashboard = (props) => {
                                     <p className='italic text-black text-xs md:text-sm line-clamp-3'>{product.desc}</p>
                                   </div>
                                 </div>
-                              </Link>
+                              </div>
                               <div className='flex flex-wrap items-center justify-center'>
                                 <CustomButton type='filled' title={`Download Product`} handleClick={() => downloadProduct(product)} customStyles='md:max-w-[170px] w-fit px-4 py-2.5 font-bold text-sm' />
                               </div>                              

@@ -42,7 +42,6 @@ export default function Marketplace() {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
 
-  // Fetch products on component mount
   useEffect(() => {
     const fetchProducts = async () => {
       const approvedRef = collectionGroup(db, 'approved');
@@ -54,8 +53,7 @@ export default function Marketplace() {
       }));
 
       setProducts(fetchedData);
-      setProductsLoading(false); // Stop the loading spinner
-      console.log(fetchedData); // Log fetchedData directly as products state update may not have occurred yet
+      setProductsLoading(false);
     }
 
     fetchProducts();
@@ -75,7 +73,6 @@ export default function Marketplace() {
       }));
 
     setImages(fetchedData);
-    console.log(fetchedData); // Log fetchedData directly as products state update may not have occurred yet
   }
 
   const [texts, setTexts] = useState([]);
@@ -92,7 +89,6 @@ export default function Marketplace() {
       }));
 
     setTexts(fetchedData);
-    console.log(fetchedData); // Log fetchedData directly as products state update may not have occurred yet
   }
 
   const [prompts, setPrompts] = useState([]);
@@ -109,29 +105,7 @@ export default function Marketplace() {
       }));
 
     setPrompts(fetchedData);
-    console.log(fetchedData); // Log fetchedData directly as products state update may not have occurred yet
   }
-
-  {/*  TO FILTER FROM EACH COLLECTION
-      useEffect(() => {
-  const fetchProducts = async () => {
-    const submittedRef = collectionGroup(db, 'submitted');
-    const querySnapshot = await getDocs(submittedRef);
-    
-    const fetchedData = querySnapshot.docs
-      .filter(doc => doc.data().parentCollection === 'images')
-      .map((doc) => ({
-        ...doc.data(),
-        id: doc.id,
-      }));
-
-    setProducts(fetchedData);
-    console.log(fetchedData); // Log fetchedData directly as products state update may not have occurred yet
-  }
-
-  fetchProducts();
-}, []);
-  */}
 
   const [searchTerm, setSearchTerm] = useState("");
 

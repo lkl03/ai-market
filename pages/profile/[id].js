@@ -234,7 +234,7 @@ const Profile = (props) => {
                             <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                 <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                 <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                <p className="font-semibold">{product.ai}</p>
+                                <p className="font-semibold uppercase">{product.ai}</p>
                                 </div>
                                 <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                 <p className="font-bold text-black">${product.price}</p>
@@ -260,7 +260,7 @@ const Profile = (props) => {
                             <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                 <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                 <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                <p className="font-semibold">{product.ai}</p>
+                                <p className="font-semibold uppercase">{product.ai}</p>
                                 </div>
                                 <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                 <p className="font-bold text-black">${product.price}</p>
@@ -286,7 +286,7 @@ const Profile = (props) => {
                             <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                 <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                 <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                <p className="font-semibold">{product.ai}</p>
+                                <p className="font-semibold uppercase">{product.ai}</p>
                                 </div>
                                 <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                 <p className="font-bold text-black">${product.price}</p>
@@ -312,7 +312,7 @@ const Profile = (props) => {
                             <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                 <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                                 <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                                <p className="font-semibold">{product.ai}</p>
+                                <p className="font-semibold uppercase">{product.ai}</p>
                                 </div>
                                 <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-[#04E762] bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                                 <p className="font-bold text-black">${product.price}</p>
@@ -486,7 +486,7 @@ const Profile = (props) => {
                           <div className='relative max-w-full md:max-w-[350px] m-auto'>
                             <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                             <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                              <p className="font-semibold">{product.ai}</p>
+                              <p className="font-semibold uppercase">{product.ai}</p>
                             </div>
                             <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                               <p className="font-bold text-white">${product.price}</p>
@@ -512,7 +512,7 @@ const Profile = (props) => {
                           <div className='relative max-w-full md:max-w-[350px] m-auto'>
                             <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                             <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                              <p className="font-semibold">{product.ai}</p>
+                              <p className="font-semibold uppercase">{product.ai}</p>
                             </div>
                             <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                               <p className="font-bold text-white">${product.price}</p>
@@ -538,7 +538,7 @@ const Profile = (props) => {
                           <div className='relative max-w-full md:max-w-[350px] m-auto'>
                             <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                             <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                              <p className="font-semibold">{product.ai}</p>
+                              <p className="font-semibold uppercase">{product.ai}</p>
                             </div>
                             <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                               <p className="font-bold text-white">${product.price}</p>
@@ -564,7 +564,7 @@ const Profile = (props) => {
                           <div className='relative max-w-full md:max-w-[350px] m-auto'>
                             <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
                             <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-white bg-opacity-85 rounded py-1 px-1 md:px-2 text-xs md:text-sm">
-                              <p className="font-semibold">{product.ai}</p>
+                              <p className="font-semibold uppercase">{product.ai}</p>
                             </div>
                             <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-black bg-opacity-90 rounded py-1 px-1 md:px-2 text-xs md:text-base">
                               <p className="font-bold text-white">${product.price}</p>

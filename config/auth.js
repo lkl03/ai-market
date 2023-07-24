@@ -1,6 +1,6 @@
 import { auth, db } from '../firebase';
 import { GoogleAuthProvider, OAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 
 import { profilebg } from '../assets';
@@ -40,7 +40,7 @@ export const signInWithGoogle = async () => {
         profilePic: result.user.photoURL,
         profileBg: bgURL,
         description: '',
-        totalSales: '',
+        totalSales: 0,
         lastSale: '',
         valoration: '',
         createdAt: result.user.metadata.creationTime,
@@ -54,8 +54,24 @@ export const signInWithGoogle = async () => {
         githubURL: '',
         dribbbleURL: '',
         behanceURL: '',
+        paypalEmail: '',
+        paypalMerchantID: '',
+        userIsPayPalLogged: false,
+        totalProducts: 0
         // add other properties you want to store
       });
+
+      // Set email data and send welcome email
+      const dataApprovedEmail = {
+        email: result.user.email,
+        name: result.user.displayName,
+      };
+
+      fetch("../api/welcome", {
+        "method": "POST",
+        "headers": { "content-type": "application/json" },
+        "body": JSON.stringify(dataApprovedEmail)
+      })
     }
     return result;
   } catch (error) {
