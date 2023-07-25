@@ -309,7 +309,7 @@ export default function Sell() {
   
       setMessage({
         status: 'success',
-        text: 'You\'ve just submitted your product! Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace. Check the status of your submitted products:'
+        text: 'You\'ve just submitted your product! Once it gets approved you will receive a notification in your email, also it will be visible and buyable for all the users on the marketplace.'
       });
   
       // Clear staged data

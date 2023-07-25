@@ -197,6 +197,12 @@ const Product = (props) => {
     return buyerDocSnap.data().username;
   }
 
+  const getPublicID = async () => {
+    const getPublicIDDocRef = doc(db, 'users', user.uid);
+    const publicIDDocSnap = await getDoc(getPublicIDDocRef);
+    return buyerDocSnap.data().publicID;
+  }
+
   const calculateSellerAmount = (price) => {
     // Calculate 10% of the price
     const discount = price * 0.1;
@@ -208,11 +214,12 @@ const Product = (props) => {
     return parseFloat(finalPrice.toFixed(2));
   }
 
-  const sendEmails = (buyerUsername) => {
+  const sendEmails = (buyerUsername, buyerPublicID) => {
     const buyerDataEmail = {
       email: user.email,
       name: user.displayName,
-      product: productToBuy.title
+      product: productToBuy.title,
+      dashboard: `https://aitropy.io/dashboard/${buyerPublicID}`
     };
 
     const finalPrice = calculateSellerAmount(productToBuy.price)
@@ -260,7 +267,8 @@ const Product = (props) => {
         await new Promise(resolve => setTimeout(resolve, 2000)); // wait for 1 second
         await updateDatabase();
         const buyerUsername = await getUsername();
-        sendEmails(buyerUsername);
+        const buyerPublicID = await getPublicID();
+        sendEmails(buyerUsername, buyerPublicID);
       } catch (error) {
       }
     })

@@ -12,14 +12,14 @@ export default async (req = NextApiRequest, res = NextApiResponse) => {
   const msg = {
     to: email,
     from: {
-      email: 'librecripto@gmail.com',
-      name: 'LibreCripto',
+      email: 'aitropy.io@gmail.com',
+      name: 'AITropy',
     },
     templateId: 'd-868c93e9484446659c627525e7f0cf8d',
     dynamic_template_data: {
-      url: 'https://librecripto.com/acceder',
-      support_email: 'librecripto@librecripto.com',
-      main_url: 'https://librecripto.com',
+      url: 'https://aitropy.io',
+      support_email: 'aitropy.io@gmail.com',
+      main_url: 'https://aitropy.io',
       email,
       name
     }
