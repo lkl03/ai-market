@@ -33,6 +33,10 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { v4 as uuidv4 } from 'uuid';
 import ClipLoader from "react-spinners/ClipLoader";
 
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+
+import { ProductionProvider, useProduction } from '../context/productionContext';
+
 export default function Sell() {
   const snap = useSnapshot(state)
   const { user, loading } = useUser();
@@ -55,6 +59,14 @@ export default function Sell() {
     // Cleanup the subscription on unmount
     return () => unsubscribe();
   }, []); // Run effect only on mount and unmount
+
+  const PayPalProviderWithProduction = ({ children }) => {
+    const { isLive } = useProduction();
+
+    if (isLive === true) {
+      setIsLiveEnvState(true)
+    }
+  }
   
   const fetchUserData = async (uid) => {
     const usersRef = collection(db, 'users');
@@ -232,7 +244,7 @@ export default function Sell() {
       setError(err.message);
     } finally {
       setInfoLoading(false);
-      router.push(`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}`)
+      router.push(isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}`)
     }
   };
 
@@ -1633,7 +1645,7 @@ export default function Sell() {
                                   </label>
                                 </div>
                                 <div className='flex flex-wrap items-center justify-center mt-4'>
-                                  <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}`}>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-[#0070BA]'/> Continue with PayPal</>}</button>
+                                  <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href = isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}` }>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-[#0070BA]'/> Continue with PayPal</>}</button>
                                 </div>
                               </motion.div>
                           </>

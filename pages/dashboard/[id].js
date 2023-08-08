@@ -32,6 +32,10 @@ import {
 
 import { saveAs } from 'file-saver';
 
+import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+
+import { ProductionProvider, useProduction } from '../context/productionContext';
+
 const Dashboard = (props) => {
   const snap = useSnapshot(state)
   const { user, loading } = useUser();
@@ -104,6 +108,14 @@ const Dashboard = (props) => {
   
       fetchProducts();
     }, []);
+
+    const PayPalProviderWithProduction = ({ children }) => {
+      const { isLive } = useProduction();
+  
+      if (isLive === true) {
+        setIsLiveEnvState(true)
+      }
+    }
 
     const fetchProducts = async () => {
       const submittedProductsRef = collectionGroup(db, 'submitted');
@@ -560,7 +572,7 @@ const Dashboard = (props) => {
                           </label>
                           <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
                             Change Account
-                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#fff]'/>Continue with PayPal</button>
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5' type='button' onClick={() => window.location.href= isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#fff]'/>Continue with PayPal</button>
                           </div>
                           </div>
                           <h3 className="2xl:text-2xl text-xl font-black text-black text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
@@ -822,7 +834,7 @@ const Dashboard = (props) => {
                           </label>
                           <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
                             <p className='text-white'>Change Account</p>
-                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#0070BA]'/>Continue with PayPal</button>
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href= isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#0070BA]'/>Continue with PayPal</button>
                           </div>
                           </div>
                           <h3 className="2xl:text-2xl text-xl font-black text-white text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
