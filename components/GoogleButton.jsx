@@ -3,7 +3,7 @@ import { useSnapshot } from 'valtio'
 import state from '../store'
 import { AnimatePresence } from 'framer-motion'
 
-const GoogleButton = ({handleClick}) => {
+const GoogleButton = ({handleClick, text}) => {
     const snap = useSnapshot(state)
     return (
         <AnimatePresence>
@@ -15,7 +15,7 @@ const GoogleButton = ({handleClick}) => {
                         <path d="M4.17667 11.9366C3.97215 11.3165 3.85378 10.6521 3.85378 9.96562C3.85378 9.27905 3.97215 8.6147 4.16591 7.99463L4.1605 7.86257L1.13246 5.44363L1.03339 5.49211C0.37677 6.84302 0 8.36005 0 9.96562C0 11.5712 0.37677 13.0881 1.03339 14.4391L4.17667 11.9366Z" fill="#FBBC05" />
                         <path d="M9.68807 3.85336C11.5073 3.85336 12.7344 4.66168 13.4342 5.33718L16.1684 2.59107C14.4892 0.985496 12.3039 0 9.68807 0C5.89885 0 2.62637 2.23672 1.0332 5.49214L4.16573 7.99466C4.95162 5.59183 7.12608 3.85336 9.68807 3.85336Z" fill="#EB4335" />
                     </svg>
-                    <p className="text-base font-medium ml-4 text-black">Continue with Google</p>
+                    <p className="text-base font-medium ml-4 text-black">{text}</p>
                 </button>
             )}
             {snap.themeDark && (
@@ -26,7 +26,7 @@ const GoogleButton = ({handleClick}) => {
                         <path d="M4.17667 11.9366C3.97215 11.3165 3.85378 10.6521 3.85378 9.96562C3.85378 9.27905 3.97215 8.6147 4.16591 7.99463L4.1605 7.86257L1.13246 5.44363L1.03339 5.49211C0.37677 6.84302 0 8.36005 0 9.96562C0 11.5712 0.37677 13.0881 1.03339 14.4391L4.17667 11.9366Z" fill="#FBBC05" />
                         <path d="M9.68807 3.85336C11.5073 3.85336 12.7344 4.66168 13.4342 5.33718L16.1684 2.59107C14.4892 0.985496 12.3039 0 9.68807 0C5.89885 0 2.62637 2.23672 1.0332 5.49214L4.16573 7.99466C4.95162 5.59183 7.12608 3.85336 9.68807 3.85336Z" fill="#EB4335" />
                     </svg>
-                    <p className="text-base font-medium ml-4 text-white">Continue with Google</p>
+                    <p className="text-base font-medium ml-4 text-white">{text}</p>
                 </button>
             )}
         </AnimatePresence>

@@ -30,7 +30,7 @@ html {
 }
 
 .head-text {
-  @apply 2xl:text-[10rem] text-[6rem] 2xl:leading-[11rem] leading-[7rem] font-black;
+  @apply 2xl:text-[8rem] text-[5rem] 2xl:leading-[9rem] leading-[7rem] font-black;
 }
 
 

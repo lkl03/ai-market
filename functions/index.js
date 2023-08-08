@@ -6,11 +6,18 @@ const fetch = require('node-fetch');
 const cors = require('cors')({origin: true});
 admin.initializeApp();
 
-const CLIENT_ID = "AX9yFyALJu9l0nWJuw4_Qmfyo6ACVapt3WW15X2z9rczlkeuj3vHhURPy-UuIhPndEa6KG6d6mQpp9bG"
-const APP_SECRET = "ENd6j7nUm1aWu_utS5-wr4qHMqp8rNcAzG7jTR1h0f6iBf4be7Ce7tbnvR79K3jigzOo7TnEvbD6Ojx5"
-const baseURL = "https://api-m.sandbox.paypal.com";
+const CLIENT_ID_SANDBOX = functions.config().paypal.client_id_sandbox;
+const APP_SECRET_SANDBOX = functions.config().paypal.secret_sandbox;
+const CLIENT_ID_LIVE = functions.config().paypal.client_id_live;
+const APP_SECRET_LIVE = functions.config().paypal.secret_live;
+const baseURL_SANDBOX = "https://api-m.sandbox.paypal.com";
+const baseURL_LIVE = "https://api-m.paypal.com";
 
-async function generateAccessToken() {
+async function generateAccessToken(isLiveEnv) {
+    const CLIENT_ID = isLiveEnv ? CLIENT_ID_LIVE : CLIENT_ID_SANDBOX;
+    const APP_SECRET = isLiveEnv ? APP_SECRET_LIVE : APP_SECRET_SANDBOX;
+    const baseURL = isLiveEnv ? baseURL_LIVE : baseURL_SANDBOX;
+
     const auth = Buffer.from(CLIENT_ID + ":" + APP_SECRET).toString("base64");
 
     const response = await fetch(`${baseURL}/v1/oauth2/token`, {
@@ -26,8 +33,10 @@ async function generateAccessToken() {
     return data.access_token;
 }
 
-async function createOrder(amount, title, desc, emailAddress, merchantId) {
-    const accessToken = await generateAccessToken();
+async function createOrder(amount, title, desc, emailAddress, merchantId, isLiveEnv) {
+    const baseURL = isLiveEnv ? baseURL_LIVE : baseURL_SANDBOX;
+    const accessToken = await generateAccessToken(isLiveEnv);
+
     const url = `${baseURL}/v2/checkout/orders`;
     const response = await fetch(url, {
         method: "POST",
@@ -68,8 +77,9 @@ async function createOrder(amount, title, desc, emailAddress, merchantId) {
     return data;
 }
 
-async function capturePayment(orderId) {
-    const accessToken = await generateAccessToken();
+async function capturePayment(orderId, isLiveEnv) {
+    const baseURL = isLiveEnv ? baseURL_LIVE : baseURL_SANDBOX;
+    const accessToken = await generateAccessToken(isLiveEnv); 
     const url = `${baseURL}/v2/checkout/orders/${orderId}/capture`;
     const response = await fetch(url, {
         method: "POST",
@@ -85,8 +95,8 @@ async function capturePayment(orderId) {
 exports.createPayPalOrder = functions.https.onRequest(async (req, res) => {
     cors(req, res, async () => {
         try {
-            const { amount, title, desc, emailAddress, merchantId } = req.body;
-            const orderData = await createOrder(amount, title, desc, emailAddress, merchantId);
+            const { amount, title, desc, emailAddress, merchantId, isLiveEnv } = req.body;
+            const orderData = await createOrder(amount, title, desc, emailAddress, merchantId, isLiveEnv);
             res.status(200).send(orderData);
         } catch {
             res.status(500).send({ error: 'Something went wrong' });
@@ -97,8 +107,8 @@ exports.createPayPalOrder = functions.https.onRequest(async (req, res) => {
 exports.capturePayPalOrder = functions.https.onRequest(async (req, res) => {
     cors(req, res, async () => {
         try {
-            const orderId = req.body.orderId;
-            const captureData = await capturePayment(orderId);
+            const {orderId, isLiveEnv} = req.body;
+            const captureData = await capturePayment(orderId, isLiveEnv);
             res.status(200).send(captureData);
         } catch {
             res.status(500).send({ error: 'Something went wrong' });
@@ -109,18 +119,22 @@ exports.capturePayPalOrder = functions.https.onRequest(async (req, res) => {
 exports.getPayPalAccessToken = functions.https.onRequest(async (req, res) => {
     cors(req, res, async () => {
         try {
-            const { code } = req.body;
+            const { code, isLiveEnv } = req.body;
 
             if (!code) {
                 return res.status(400).send({ error: 'Missing authorization code' });
             }
+
+            const CLIENT_ID = isLiveEnv ? CLIENT_ID_LIVE : CLIENT_ID_SANDBOX;
+            const APP_SECRET = isLiveEnv ? APP_SECRET_LIVE : APP_SECRET_SANDBOX;
+            const baseURL = isLiveEnv ? baseURL_LIVE : baseURL_SANDBOX;
 
             const auth = Buffer.from(CLIENT_ID + ":" + APP_SECRET).toString("base64");
             const params = new URLSearchParams();
             params.append('grant_type', 'authorization_code');
             params.append('code', code);
 
-            const response = await fetch(`https://api-m.sandbox.paypal.com/v1/oauth2/token`, {
+            const response = await fetch(`${baseURL}/v1/oauth2/token`, {
                 method: "POST",
                 headers: {
                     'Accept': 'application/json',
@@ -146,13 +160,15 @@ exports.getPayPalAccessToken = functions.https.onRequest(async (req, res) => {
 exports.getPayPalUserInfo = functions.https.onRequest(async (req, res) => {
     cors(req, res, async () => {
         try {
-            const { access_token } = req.body;
+            const { access_token, isLiveEnv } = req.body;
 
             if (!access_token) {
                 return res.status(400).send({ error: 'Missing access token' });
             }
 
-            const response = await fetch(`https://api-m.sandbox.paypal.com/v1/identity/openidconnect/userinfo/?schema=openid`, {
+            const baseURL = isLiveEnv ? baseURL_LIVE : baseURL_SANDBOX;
+
+            const response = await fetch(`${baseURL}/v1/identity/openidconnect/userinfo/?schema=openid`, {
                 method: "GET",
                 headers: {
                     'Accept': 'application/json',

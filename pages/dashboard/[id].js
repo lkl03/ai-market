@@ -409,8 +409,15 @@ const Dashboard = (props) => {
   return (
     <AnimatePresence>
       <Head>
-        <title>Dashboard</title>
-        <meta name="description" content="Dashboard page" />
+        <title>My Dashboard | AITropy</title>
+        <meta name="description" content="Explore the world of AI-generated texts, images, and prompts with AITropy. Buy, sell, and discover a lot of products for and created by GPT, DALL-E, STABLE DIFFUSION, and MIDJOURNEY tools. Start today! | AITropy" />
+        <meta name="keywords" content="marketplace, ai-generated products, prompts, images, texts, gpt, dall-e, stable diffusion, midjourney, AI, artificial intelligence, buy, sell, community, no-fees" />
+        <meta property="og:title" content="My Dashboard | AITropy" />
+        <meta property="og:description" content="Explore the world of AI-generated texts, images, and prompts with AITropy. Buy, sell, and discover a lot of products for and created by GPT, DALL-E, STABLE DIFFUSION, and MIDJOURNEY tools. Start today! | AITropy" />
+        <meta property="og:url" content={`${process.env.NEXT_PUBLIC_AITROPY_URL}`} />
+        <meta name="twitter:title" content="My Dashboard | AITropy" />
+        <meta name="twitter:description" content="Explore the world of AI-generated texts, images, and prompts with AITropy. Buy, sell, and discover a lot of products for and created by GPT, DALL-E, STABLE DIFFUSION, and MIDJOURNEY tools. Start today! | AITropy" />
+        <link rel="icon" href="/favicon.png" />
       </Head>
       <motion.div className='flex flex-wrap fixed z-[10000] gap-1 bottom-4 right-4 bg-[#04E762]  text-white font-bold py-2 px-4 rounded-full'>
         <a onClick={() => (state.themeDark = true) && (state.themeLight = false)} className='cursor-pointer hover:text-gray-500 transition-all ease-in-out'><IoMdMoon size={25} /></a>
@@ -473,7 +480,7 @@ const Dashboard = (props) => {
                             </div>
 
                             <label className="block">
-                              <span className="text-black">The email for your <span className='font-medium'>AI Market</span> account</span>
+                              <span className="text-black">The email for your <span className='font-medium'>AITropy</span> account</span>
                               <input
                                 type="email"
                                 {...register("email")}
@@ -553,7 +560,7 @@ const Dashboard = (props) => {
                           </label>
                           <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
                             Change Account
-                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL}`}><FaPaypal size={25} className='text-[#fff]'/>Continue with PayPal</button>
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#fff]'/>Continue with PayPal</button>
                           </div>
                           </div>
                           <h3 className="2xl:text-2xl text-xl font-black text-black text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
@@ -735,7 +742,7 @@ const Dashboard = (props) => {
                             </div>
 
                             <label className="block">
-                              <span className="text-white">The email for your <span className='font-medium'>AI Market</span> account</span>
+                              <span className="text-white">The email for your <span className='font-medium'>AITropy</span> account</span>
                               <input
                                 type="email"
                                 {...register("email")}
@@ -815,7 +822,7 @@ const Dashboard = (props) => {
                           </label>
                           <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
                             <p className='text-white'>Change Account</p>
-                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL}`}><FaPaypal size={25} className='text-[#0070BA]'/>Continue with PayPal</button>
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href=`${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#0070BA]'/>Continue with PayPal</button>
                           </div>
                           </div>
                           <h3 className="2xl:text-2xl text-xl font-black text-white text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
