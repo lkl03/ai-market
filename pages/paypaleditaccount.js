@@ -55,6 +55,12 @@ function PayPalUserCheck() {
         if (isLive === true) {
             setIsLiveEnvState(true)
         }
+
+        return (
+            <>
+            {children}
+            </>
+          );
     }
 
     const router = useRouter();
@@ -166,6 +172,8 @@ const fetchUserData = async (uid) => {
     }
 
     return (
+        <ProductionProvider>
+        <PayPalProviderWithProduction>
         <AnimatePresence>
         <Head>
             <title>Start Selling | Buy & Sell AI-Generated Products with No-Fees | AITropy</title>
@@ -315,6 +323,8 @@ const fetchUserData = async (uid) => {
                 </>
             )}
         </AnimatePresence>
+        </PayPalProviderWithProduction>
+        </ProductionProvider>
     );
 }
 

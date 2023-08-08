@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
+import useState from 'react-usestateref';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion'
@@ -59,6 +60,8 @@ const Dashboard = (props) => {
   const [showApprovedModal, setShowApprovedModal] = useState(false);
   const [approvedProductToDelete, setApprovedProductToDelete] = useState(null);
 
+  const [isLiveEnvState, setIsLiveEnvState, isLiveEnvStateRef] = useState(false)
+
   // Redirects if necessary
   useEffect(() => {
     if (!loading && user) {
@@ -115,6 +118,11 @@ const Dashboard = (props) => {
       if (isLive === true) {
         setIsLiveEnvState(true)
       }
+      return (
+        <>
+        {children}
+        </>
+      );
     }
 
     const fetchProducts = async () => {
@@ -419,6 +427,8 @@ const Dashboard = (props) => {
   }
 
   return (
+    <ProductionProvider>
+    <PayPalProviderWithProduction>
     <AnimatePresence>
       <Head>
         <title>My Dashboard | AITropy</title>
@@ -960,6 +970,8 @@ const Dashboard = (props) => {
         </>
       )}
     </AnimatePresence>
+    </PayPalProviderWithProduction>
+    </ProductionProvider>
   )
 }
 

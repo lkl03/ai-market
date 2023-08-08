@@ -46,6 +46,8 @@ export default function Sell() {
   const [paypalInfo, setPaypalInfo, paypalInfoRef] = useState('')
   const [paypalIsActive, setPaypalIsActive, paypalIsActiveRef] = useState(false)
   const [message, setMessage, messageRef] = useState({});
+
+  const [isLiveEnvState, setIsLiveEnvState, isLiveEnvStateRef] = useState(false)
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, user => {
@@ -66,6 +68,12 @@ export default function Sell() {
     if (isLive === true) {
       setIsLiveEnvState(true)
     }
+
+    return (
+      <>
+      {children}
+      </>
+    );
   }
   
   const fetchUserData = async (uid) => {
@@ -341,6 +349,8 @@ export default function Sell() {
   };
 
   return (
+    <ProductionProvider>
+    <PayPalProviderWithProduction>
     <AnimatePresence>
       <Head>
         <title>Start Selling | Buy & Sell AI-Generated Products with No-Fees | AITropy</title>
@@ -2097,5 +2107,7 @@ export default function Sell() {
         </>
       )}
     </AnimatePresence>
+    </PayPalProviderWithProduction>
+    </ProductionProvider>
   )
 }
