@@ -30,10 +30,8 @@ html {
 }
 
 .head-text {
-  @apply 2xl:text-[8rem] text-[5rem] 2xl:leading-[9rem] leading-[7rem] font-black;
+  @apply 2xl:text-[8rem] lg:text-[5rem] text-[2rem] 2xl:leading-[9rem] lg:leading-[7rem] leading-[2.5rem] font-black;
 }
-
-
 
 
 .download-btn {

@@ -63,18 +63,29 @@ export default function Home() {
                         </motion.section>
                         <motion.section>
                             <motion.div>
-                                <motion.div className='tile max-w-[450px] shadow-lg 2xl:block hidden' {...headContentAnimation}><img src={tile1.src} /></motion.div>
-                                <motion.div className='tile max-w-[350px] absolute top-[52%] right-[25%] z-20 shadow-lg 2xl:block hidden' {...headContentAnimation}><img src={tile2.src} /></motion.div>
-                                <motion.div className='tile max-w-[350px] absolute top-[10%] right-[5%] z-[-1] shadow-lg 2xl:block hidden' {...headContentAnimation}><img src={tile3.src} /></motion.div>
-                                <motion.div className="2xl:hidden flex lg:flex-col flex-wrap justify-center items-center h-auto gap-4" {...headContentAnimation}>
-                                    <motion.div className="md:max-w-[450px] lg:h-[auto] lg:w-auto h-[25%] w-[75%]">
-                                        <img src={tile1.src} alt="Image 1" className="w-full h-full object-cover shadow-lg" />
-                                    </motion.div>
-                                    <motion.div className="md:max-w-[450px] h-1/2 flex flex-row justify-between gap-4">
+                                <motion.div className='tile max-w-[450px] shadow-lg 3xl:block hidden' {...headContentAnimation}><img src={tile1.src} /></motion.div>
+                                <motion.div className='tile max-w-[350px] absolute top-[52%] right-[25%] z-20 shadow-lg 3xl:block hidden' {...headContentAnimation}><img src={tile2.src} /></motion.div>
+                                <motion.div className='tile max-w-[350px] absolute top-[10%] right-[5%] z-[-1] shadow-lg 3xl:block hidden' {...headContentAnimation}><img src={tile3.src} /></motion.div>
+                                <motion.div className="3xl:hidden flex flex-col flex-wrap justify-center items-center h-auto gap-4 2xl:max-w-[300px] md:max-w-[200px]" {...headContentAnimation}>
+                                    <motion.div className="md:hidden h-1/2 flex flex-row justify-between gap-4 w-full">
+                                        <motion.div className="w-full h-auto">
+                                            <img src={tile1.src} alt="Image 1" className="w-full h-full object-cover shadow-lg" />
+                                        </motion.div>
                                         <motion.div className="w-full h-auto">
                                             <img src={tile2.src} alt="Image 2" className="w-full h-full object-cover shadow-lg" />
                                         </motion.div>
-                                        <motion.div className="md:max-w-[450px] h-auto w-full">
+                                        <motion.div className="w-full h-auto">
+                                            <img src={tile3.src} alt="Image 3" className="w-full h-full object-cover shadow-lg" />
+                                        </motion.div>
+                                    </motion.div>
+                                    <motion.div className="hidden md:flex h-full">
+                                        <img src={tile1.src} alt="Image 1" className="w-full h-full object-cover shadow-lg" />
+                                    </motion.div>
+                                    <motion.div className="hidden md:flex flex-col h-1/2 justify-between gap-4 items-center">
+                                        <motion.div className="h-auto">
+                                            <img src={tile2.src} alt="Image 2" className="w-full h-full object-cover shadow-lg" />
+                                        </motion.div>
+                                        <motion.div className="h-auto">
                                             <img src={tile3.src} alt="Image 3" className="w-full h-full object-cover shadow-lg" />
                                         </motion.div>
                                     </motion.div>
@@ -111,19 +122,30 @@ export default function Home() {
                             </motion.div>
                         </motion.section>
                         <motion.section>
-                            <motion.div>
-                                <motion.div className='tile max-w-[450px] shadow-lg 2xl:block hidden' {...headContentAnimation}><img src={tile1.src} /></motion.div>
-                                <motion.div className='tile max-w-[350px] absolute top-[52%] right-[25%] z-20 shadow-lg 2xl:block hidden' {...headContentAnimation}><img src={tile2.src} /></motion.div>
-                                <motion.div className='tile max-w-[350px] absolute top-[10%] right-[5%] z-[-1] shadow-lg 2xl:block hidden' {...headContentAnimation}><img src={tile3.src} /></motion.div>
-                                <motion.div className="2xl:hidden flex lg:flex-col flex-wrap justify-center items-center h-auto gap-4" {...headContentAnimation}>
-                                    <motion.div className="md:max-w-[450px] lg:h-[auto] lg:w-auto h-[25%] w-[75%]">
-                                        <img src={tile1.src} alt="Image 1" className="w-full h-full object-cover shadow-lg" />
-                                    </motion.div>
-                                    <motion.div className="md:max-w-[450px] h-1/2 flex flex-row justify-between gap-4">
+                        <motion.div>
+                                <motion.div className='tile max-w-[450px] shadow-lg 3xl:block hidden' {...headContentAnimation}><img src={tile1.src} /></motion.div>
+                                <motion.div className='tile max-w-[350px] absolute top-[52%] right-[25%] z-20 shadow-lg 3xl:block hidden' {...headContentAnimation}><img src={tile2.src} /></motion.div>
+                                <motion.div className='tile max-w-[350px] absolute top-[10%] right-[5%] z-[-1] shadow-lg 3xl:block hidden' {...headContentAnimation}><img src={tile3.src} /></motion.div>
+                                <motion.div className="3xl:hidden flex flex-col flex-wrap justify-center items-center h-auto gap-4 2xl:max-w-[300px] md:max-w-[200px]" {...headContentAnimation}>
+                                    <motion.div className="md:hidden h-1/2 flex flex-row justify-between gap-4 w-full">
+                                        <motion.div className="w-full h-auto">
+                                            <img src={tile1.src} alt="Image 1" className="w-full h-full object-cover shadow-lg" />
+                                        </motion.div>
                                         <motion.div className="w-full h-auto">
                                             <img src={tile2.src} alt="Image 2" className="w-full h-full object-cover shadow-lg" />
                                         </motion.div>
-                                        <motion.div className="md:max-w-[450px] h-auto w-full">
+                                        <motion.div className="w-full h-auto">
+                                            <img src={tile3.src} alt="Image 3" className="w-full h-full object-cover shadow-lg" />
+                                        </motion.div>
+                                    </motion.div>
+                                    <motion.div className="hidden md:flex h-full">
+                                        <img src={tile1.src} alt="Image 1" className="w-full h-full object-cover shadow-lg" />
+                                    </motion.div>
+                                    <motion.div className="hidden md:flex flex-col h-1/2 justify-between gap-4 items-center">
+                                        <motion.div className="h-auto">
+                                            <img src={tile2.src} alt="Image 2" className="w-full h-full object-cover shadow-lg" />
+                                        </motion.div>
+                                        <motion.div className="h-auto">
                                             <img src={tile3.src} alt="Image 3" className="w-full h-full object-cover shadow-lg" />
                                         </motion.div>
                                     </motion.div>
