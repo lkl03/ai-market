@@ -949,7 +949,7 @@ export default function Sell() {
                                   <input {...register3('product', {
                                     required: true,
                                     validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf,.txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
                                 </label>
                                 {errors3.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
                                 {errors3.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
@@ -1048,7 +1048,7 @@ export default function Sell() {
                                   <input {...register3('product', {
                                     required: true,
                                     validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf,.txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
                                 </label>
                                 {errors3.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
                                 {errors3.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
@@ -1820,7 +1820,7 @@ export default function Sell() {
                                   <input {...register3('product', {
                                     required: true,
                                     validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf,.txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
                                 </label>
                                 {errors3.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
                                 {errors3.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
@@ -1919,7 +1919,7 @@ export default function Sell() {
                                   <input {...register3('product', {
                                     required: true,
                                     validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar') || file[0].name.toLowerCase().endsWith('.txt') || file[0].name.toLowerCase().endsWith('.pdf')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf, .txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                  })} disabled={infoLoading} type="file" accept=".zip,.rar,.pdf,.txt" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
                                 </label>
                                 {errors3.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
                                 {errors3.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
