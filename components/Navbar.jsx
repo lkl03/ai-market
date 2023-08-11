@@ -54,7 +54,7 @@ const NavbarLog = () => {
                         {user ? (
                             <>
                                 <div className='flex flex-wrap gap-2 items-center justify-center'>
-                                    <img src={user.photoURL} className='rounded-full w-12' alt='user-profile-pic' />
+                                    <img src={user.photoURL} className='rounded-full w-12 h-12' alt='user-profile-pic' />
                                     <div onClick={() => setDropdownOpen(!isDropdownOpen)} className='cursor-pointer'>
                                     {isDropdownOpen ?
                                         <FaChevronUp size={20} className='text-black hover:text-[#04E762] transition-all duration-300 ease-in-out' /> :
@@ -139,7 +139,7 @@ const NavbarLog = () => {
                         {user ? (
                             <>
                                 <div className='flex flex-wrap gap-2 items-center justify-center'>
-                                    <img src={user.photoURL} className='rounded-full w-12' alt='user-profile-pic' />
+                                    <img src={user.photoURL} className='rounded-full w-12 h-12' alt='user-profile-pic' />
                                     <div onClick={() => setDropdownOpen(!isDropdownOpen)} className='cursor-pointer'>
                                     {isDropdownOpen ?
                                         <FaChevronUp size={20} className='text-white hover:text-[#04E762] transition-all duration-300 ease-in-out' /> :

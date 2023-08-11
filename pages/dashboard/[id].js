@@ -112,19 +112,6 @@ const Dashboard = (props) => {
       fetchProducts();
     }, []);
 
-    const PayPalProviderWithProduction = ({ children }) => {
-      const { isLive } = useProduction();
-  
-      if (isLive === true) {
-        setIsLiveEnvState(true)
-      }
-      return (
-        <>
-        {children}
-        </>
-      );
-    }
-
     const fetchProducts = async () => {
       const submittedProductsRef = collectionGroup(db, 'submitted');
       const q = query(submittedProductsRef, where('status', '==', 'Approval pending'));
@@ -427,8 +414,6 @@ const Dashboard = (props) => {
   }
 
   return (
-    <ProductionProvider>
-    <PayPalProviderWithProduction>
     <AnimatePresence>
       <Head>
         <title>My Dashboard | AITropy</title>
@@ -970,8 +955,6 @@ const Dashboard = (props) => {
         </>
       )}
     </AnimatePresence>
-    </PayPalProviderWithProduction>
-    </ProductionProvider>
   )
 }
 
