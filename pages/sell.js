@@ -61,20 +61,6 @@ export default function Sell() {
     // Cleanup the subscription on unmount
     return () => unsubscribe();
   }, []); // Run effect only on mount and unmount
-
-  const PayPalProviderWithProduction = ({ children }) => {
-    const { isLive } = useProduction();
-
-    if (isLive === true) {
-      setIsLiveEnvState(true)
-    }
-
-    return (
-      <>
-      {children}
-      </>
-    );
-  }
   
   const fetchUserData = async (uid) => {
     const usersRef = collection(db, 'users');
@@ -343,14 +329,12 @@ export default function Sell() {
     } finally {
       setShowMessage(true);
       setTimeout(() => {
-        router.push(`/dashboard/${userID}`);
+        router.push(`/marketplace`);
       }, 4000);
     }
   };
 
   return (
-    <ProductionProvider>
-    <PayPalProviderWithProduction>
     <AnimatePresence>
       <Head>
         <title>Start Selling | Buy & Sell AI-Generated Products with No-Fees | AITropy</title>
@@ -676,7 +660,7 @@ export default function Sell() {
                                 <CustomLink 
                                     type='filled' 
                                     title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
-                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
                                 />
                             </motion.div>
@@ -898,7 +882,7 @@ export default function Sell() {
                                 <CustomLink 
                                     type='filled' 
                                     title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
-                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
                                 />
                             </motion.div>
@@ -1120,7 +1104,7 @@ export default function Sell() {
                                 <CustomLink 
                                     type='filled' 
                                     title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
-                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
                                 />
                             </motion.div>
@@ -1156,9 +1140,8 @@ export default function Sell() {
                           </div>
                         </div>
                       </div>
-                      <p className='text-center mt-4'>Check the status of your submitted products:</p>
                       <div className='flex flex-wrap items-center justify-center mt-4'>
-                        <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                        <CustomLink type='filled' title='Go to the Market' path={`/marketplace`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                       </div>
                     </motion.div>
                   </>
@@ -1188,9 +1171,8 @@ export default function Sell() {
                           </div>
                         </div>
                       </div>
-                      <p className='text-center mt-4'>Check the status of your submitted products:</p>
                       <div className='flex flex-wrap items-center justify-center mt-4'>
-                        <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                        <CustomLink type='filled' title='Go to the Market' path={`/marketplace`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                       </div>
                     </motion.div>
                   </>
@@ -1220,9 +1202,8 @@ export default function Sell() {
                           </div>
                         </div>
                       </div>
-                      <p className='text-center mt-4'>Check the status of your submitted products:</p>
                       <div className='flex flex-wrap items-center justify-center mt-4'>
-                        <CustomLink type='filled' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                        <CustomLink type='filled' title='Go to the Market' path={`/marketplace`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                       </div>
                     </motion.div>
                   </>
@@ -1546,8 +1527,8 @@ export default function Sell() {
                                   <p className='text-center text-white'>{messageRef.current.text}</p>
                                   <CustomLink
                                     type='filled'
-                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
-                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    title={messageRef.current.status === 'success' ? 'Go to the Market' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm'
                                   />
                                 </motion.div>
@@ -1768,8 +1749,8 @@ export default function Sell() {
                                   <p className='text-center text-white'>{messageRef.current.text}</p>
                                   <CustomLink
                                     type='filled'
-                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
-                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    title={messageRef.current.status === 'success' ? 'Go to the Market' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm'
                                   />
                                 </motion.div>
@@ -1990,8 +1971,8 @@ export default function Sell() {
                                   <p className='text-center text-white'>{messageRef.current.text}</p>
                                   <CustomLink
                                     type='filled'
-                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
-                                    path={messageRef.current.status === 'success' ? `/dashboard/${userID}` : '/sell'}
+                                    title={messageRef.current.status === 'success' ? 'Go to the Market' : 'Retry'}
+                                    path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm'
                                   />
                                 </motion.div>
@@ -2027,9 +2008,8 @@ export default function Sell() {
                           </div>
                         </div>
                       </div>
-                      <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
                       <div className='flex flex-wrap items-center justify-center mt-4'>
-                        <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                        <CustomLink type='outline' title='Go to the Market' path={`/marketplace`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                       </div>
                     </motion.div>
                   </>
@@ -2059,9 +2039,8 @@ export default function Sell() {
                           </div>
                         </div>
                       </div>
-                      <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
                       <div className='flex flex-wrap items-center justify-center mt-4'>
-                        <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                        <CustomLink type='outline' title='Go to the Market' path={`/marketplace`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                       </div>
                     </motion.div>
                   </>
@@ -2091,9 +2070,8 @@ export default function Sell() {
                           </div>
                         </div>
                       </div>
-                      <p className='text-center mt-4 text-white'>Check the status of your submitted products:</p>
                       <div className='flex flex-wrap items-center justify-center mt-4'>
-                        <CustomLink type='outline' title='My Products' path={`/dashboard/${userID}`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
+                        <CustomLink type='outline' title='Go to the Market' path={`/marketplace`} customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' />
                       </div>
                     </motion.div>
                   </>
@@ -2107,7 +2085,5 @@ export default function Sell() {
         </>
       )}
     </AnimatePresence>
-    </PayPalProviderWithProduction>
-    </ProductionProvider>
   )
 }
