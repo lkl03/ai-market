@@ -70,10 +70,6 @@ const Product = (props) => {
 
   const PayPalProviderWithProduction = ({ children }) => {
     const { isLive } = useProduction();
-
-    if (isLive === true) {
-      setIsLiveEnvState(true)
-    }
     
     return (
       <PayPalScriptProvider options={{
