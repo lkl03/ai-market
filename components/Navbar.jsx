@@ -63,6 +63,9 @@ const NavbarLog = () => {
                                     </div>
                                     {isDropdownOpen && 
                                         <ul className='bg-[#f6faf0] shadow-lg py-2 absolute top-20'>
+                                            <Link href={`../profile/${userIDRef.current}`}>
+                                            <li className='px-3 py-2 text-black hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Profile</li>
+                                            </Link>
                                             <Link href={`../dashboard/${userIDRef.current}`}>
                                             <li className='px-3 py-2 text-black hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Dashboard</li>
                                             </Link>
@@ -103,6 +106,9 @@ const NavbarLog = () => {
                                 </Link>
                                 {user ?
                                     <>
+                                        <Link href={`../profile/${userIDRef.current}`}>
+                                            <li className='px-3 py-3 text-black hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Profile</li>
+                                        </Link>
                                         <Link href={`../dashboard/${userIDRef.current}`}>
                                             <li className='px-3 py-3 text-black hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Dashboard</li>
                                         </Link>
@@ -148,6 +154,9 @@ const NavbarLog = () => {
                                     </div>
                                     {isDropdownOpen && 
                                         <ul className='bg-gray-900 shadow-lg py-2 absolute top-20'>
+                                            <Link href={`../profile/${userIDRef.current}`}>
+                                            <li className='px-3 py-2 text-white hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Profile</li>
+                                            </Link>
                                             <Link href={`../dashboard/${userIDRef.current}`}>
                                             <li className='px-3 py-2 text-white hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Dashboard</li>
                                             </Link>
@@ -188,6 +197,9 @@ const NavbarLog = () => {
                                 </Link>
                                 {user ?
                                     <>
+                                        <Link href={`../profile/${userIDRef.current}`}>
+                                            <li className='px-3 py-3 text-white hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Profile</li>
+                                        </Link>
                                         <Link href={`../dashboard/${userIDRef.current}`}>
                                             <li className='px-3 py-3 text-white hover:text-[#04E762] cursor-pointer transition-all duration-300 ease-in-out'>My Dashboard</li>
                                         </Link>

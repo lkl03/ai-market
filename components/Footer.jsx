@@ -36,7 +36,7 @@ const Footer = () => {
                             <Link href='/terms'><p className="text-black hover:text-[#04E762] transition-all duration-300 ease-in-out px-3 py-2 rounded-md text-sm font-medium">Terms & Conditions</p></Link>
                         </div>
                         <div className="flex items-center justify-center mt-4 sm:mt-0">
-                            <p className="text-black italic px-3 py-2 rounded-md text-sm font-medium">© AITropy 2023 - V1.0.1</p>
+                            <p className="text-black italic px-3 py-2 rounded-md text-sm font-medium">© AITropy 2023 - V1.1</p>
                         </div>
                         </div>
                         <div className="flex mt-4 sm:mt-0">
@@ -61,7 +61,7 @@ const Footer = () => {
                             <Link href='/terms'><p className="text-white hover:text-[#04E762] transition-all duration-300 ease-in-out px-3 py-2 rounded-md text-sm font-medium">Terms & Conditions</p></Link>
                         </div>
                         <div className="flex items-center justify-center mt-4 sm:mt-0">
-                            <p className="text-white italic px-3 py-2 rounded-md text-sm font-medium">© AITropy 2023 - V1.0.1</p>
+                            <p className="text-white italic px-3 py-2 rounded-md text-sm font-medium">© AITropy 2023 - V1.1</p>
                         </div>
                         </div>
                         <div className="flex mt-4 sm:mt-0">

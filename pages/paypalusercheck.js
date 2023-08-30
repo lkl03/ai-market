@@ -37,6 +37,8 @@ import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 import { ProductionProvider, useProduction } from '../context/productionContext';
 
+import isProduction from '../hooks/isProduction';
+
 function PayPalUserCheck() {
     const snap = useSnapshot(state)
 const { user, loading } = useUser();
@@ -46,15 +48,12 @@ const [userPublicID, setUserPublicID, userPublicIDRef] = useState('');
 const [userInfo, setUserInfo, userInfoRef] = useState(null);
 const [message, setMessage] = useState({});
 
-const [isLiveEnvState, setIsLiveEnvState, isLiveEnvStateRef] = useState(false)
+const isLiveEnvState = isProduction()
 
 
 const PayPalProviderWithProduction = ({ children }) => {
     const { isLive } = useProduction();
 
-    if (isLive === true) {
-        setIsLiveEnvState(true)
-    }
     return (
         <>
         {children}
@@ -90,7 +89,7 @@ useEffect(() => {
         },
         body: JSON.stringify({ 
             code: authCode,
-            isLiveEnv: isLiveEnvStateRef.current
+            isLiveEnv: isLiveEnvState
         })
     }).then(response => {
             if (!response.ok) throw new Error('Network response was not ok');
@@ -103,7 +102,7 @@ useEffect(() => {
                 },
                 body: JSON.stringify({ 
                     access_token: data.access_token,
-                    isLiveEnv: isLiveEnvStateRef.current
+                    isLiveEnv: isLiveEnvState
                 })
             }).then(response => {
                     if (!response.ok) throw new Error('Network response was not ok');

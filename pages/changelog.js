@@ -44,6 +44,15 @@ export default function Home() {
                         <motion.div {...headTextAnimation} className='mt-8 md:min-h-screen'>
                             <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-black text-center'>Changelog</h2>
                             <motion.div {...headContentAnimation} className='flex flex-col gap-5 mt-4'>
+                                <h2 className='2xl:text-[1.75rem] text-[1.1rem] font-black text-black text-center'>August 30th, 2023</h2>
+                                <h4 className='2xl:text-[1.25rem] text-[0.9rem] font-black text-black text-center'>Version Release: 1.1</h4>
+                                <ul className='md:max-w-[80%] max-w-[90%] text-center m-auto font-normal text-gray-600 text-base list-disc'>
+                                    <li>Added feature to edit submitted products.</li>
+                                    <li>Added feature to upload multiple files for image products instead of a compressed folder.</li>
+                                    <li>Updated FAQ page.</li>
+                                    <li>Resolved minor errors that were causing bad user experience throughout the selling process.</li>
+                                    <li>Resolved minor errors on dashboard page.</li>
+                                </ul>
                                 <h2 className='2xl:text-[1.75rem] text-[1.1rem] font-black text-black text-center'>August 21st, 2023</h2>
                                 <h4 className='2xl:text-[1.25rem] text-[0.9rem] font-black text-black text-center'>Version Release: 1.0.1</h4>
                                 <ul className='md:max-w-[80%] max-w-[90%] text-center m-auto font-normal text-gray-600 text-base list-disc'>
@@ -67,6 +76,15 @@ export default function Home() {
                         <motion.div {...headTextAnimation} className='mt-8 md:min-h-screen'>
                             <h2 className='2xl:text-[3rem] text-[1.5rem] font-black text-white text-center'>Changelog</h2>
                             <motion.div {...headContentAnimation} className='flex flex-col gap-5 mt-4'>
+                                <h2 className='2xl:text-[1.75rem] text-[1.1rem] font-black text-white text-center'>August 30th, 2023</h2>
+                                <h4 className='2xl:text-[1.25rem] text-[0.9rem] font-black text-white text-center'>Version Release: 1.1</h4>
+                                <ul className='md:max-w-[80%] max-w-[90%] text-center m-auto font-normal text-white text-base list-disc'>
+                                    <li>Added feature to edit submitted products.</li>
+                                    <li>Added feature to upload multiple files for image products instead of a compressed folder.</li>
+                                    <li>Updated FAQ page.</li>
+                                    <li>Resolved minor errors that were causing bad user experience throughout the selling process.</li>
+                                    <li>Resolved minor errors on dashboard page.</li>
+                                </ul>
                                 <h2 className='2xl:text-[1.75rem] text-[1.1rem] font-black text-white text-center'>August 21st, 2023</h2>
                                 <h4 className='2xl:text-[1.25rem] text-[0.9rem] font-black text-white text-center'>Version Release: 1.0.1</h4>
                                 <ul className='md:max-w-[80%] max-w-[90%] text-center m-auto font-normal text-white text-base list-disc'>

@@ -37,6 +37,8 @@ import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 import { ProductionProvider, useProduction } from '../context/productionContext';
 
+import isProduction from '../hooks/isProduction';
+
 export default function Sell() {
   const snap = useSnapshot(state)
   const { user, loading } = useUser();
@@ -47,7 +49,7 @@ export default function Sell() {
   const [paypalIsActive, setPaypalIsActive, paypalIsActiveRef] = useState(false)
   const [message, setMessage, messageRef] = useState({});
 
-  const [isLiveEnvState, setIsLiveEnvState, isLiveEnvStateRef] = useState(false)
+  const isLiveEnvState = isProduction()
   
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, user => {
@@ -147,6 +149,9 @@ export default function Sell() {
       // Determine paths
       const thumbnailPath = `thumbnails/${type}s/${data.thumbnail[0].name}`;
       const productPath = `products/${type}s/${data.product[0].name}`;
+
+      // Change productPath to accommodate multiple images
+      const productBasePath = `products/${type}s/${productId}`; // using productId as folder name for multiple images
   
       const userID = auth.currentUser.uid;
   
@@ -192,12 +197,31 @@ export default function Sell() {
       const thumbnailUploadTask = uploadBytesResumable(thumbnailRef, data.thumbnail[0]);
       await thumbnailUploadTask; // wait for upload to complete
       let thumbnailURL = await getDownloadURL(thumbnailRef);
+
+      let productURL; // Declare it here
+      let productURLs = []; // Declare an array to hold multiple URLs for images
+      
+      if (stagedDataRef.current.type === 'image') {
+        // If the product type is 'image', upload multiple files
+        for (let i = 0; i < data.product.length; i++) {
+          const individualFile = data.product[i];
+          const individualProductPath = `${stagedDataRef.current.productPath}-image${i}`;
+          const individualProductRef = ref(storage, individualProductPath);
   
-      // Upload product
-      const productRef = ref(storage, productPath);
-      const productUploadTask = uploadBytesResumable(productRef, data.product[0]);
-      await productUploadTask; // wait for upload to complete
-      let productURL = await getDownloadURL(productRef);
+          const individualProductUploadTask = uploadBytesResumable(individualProductRef, individualFile);
+          await individualProductUploadTask;
+  
+          const individualProductURL = await getDownloadURL(individualProductRef);
+          productURLs.push(individualProductURL);
+        }
+        productURL = JSON.stringify(productURLs); // Convert array to a JSON string
+      } else {
+        // For other types, proceed as before
+        const productRef = ref(storage, stagedDataRef.current.productPath);
+        const productUploadTask = uploadBytesResumable(productRef, data.product[0]);
+        await productUploadTask;
+        productURL = await getDownloadURL(productRef); // Directly get the URL
+      }
   
       const productData = {
         title: data.title,
@@ -238,7 +262,7 @@ export default function Sell() {
       setError(err.message);
     } finally {
       setInfoLoading(false);
-      router.push(isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}`)
+      router.push(isLiveEnvState === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}`)
     }
   };
 
@@ -265,11 +289,30 @@ export default function Sell() {
       await thumbnailUploadTask; // wait for upload to complete
       let thumbnailURL = await getDownloadURL(thumbnailRef);
   
-      // Upload product
-      const productRef = ref(storage, productPath);
-      const productUploadTask = uploadBytesResumable(productRef, data.product[0]);
-      await productUploadTask; // wait for upload to complete
-      let productURL = await getDownloadURL(productRef);
+      let productURL; // Declare it here
+      let productURLs = []; // Declare an array to hold multiple URLs for images
+
+      if (stagedDataRef.current.type === 'image') {
+        // If the product type is 'image', upload multiple files
+        for (let i = 0; i < data.product.length; i++) {
+          const individualFile = data.product[i];
+          const individualProductPath = `${stagedDataRef.current.productPath}-image${i}`;
+          const individualProductRef = ref(storage, individualProductPath);
+
+          const individualProductUploadTask = uploadBytesResumable(individualProductRef, individualFile);
+          await individualProductUploadTask;
+
+          const individualProductURL = await getDownloadURL(individualProductRef);
+          productURLs.push(individualProductURL);
+        }
+        productURL = JSON.stringify(productURLs); // Convert array to a JSON string
+      } else {
+        // For other types, proceed as before
+        const productRef = ref(storage, stagedDataRef.current.productPath);
+        const productUploadTask = uploadBytesResumable(productRef, data.product[0]);
+        await productUploadTask;
+        productURL = await getDownloadURL(productRef); // Directly get the URL
+      }
   
       const productData = {
         title: data.title,
@@ -485,13 +528,26 @@ export default function Sell() {
                                 {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
 
                                 <label className="block">
-                                  <span className="text-black">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
-                                  <input {...register1('product', {
-                                    required: true,
-                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                  <span className="text-black">
+                                    Upload the images your client will receive once they buy your product<br></br>
+                                    <span className="text-sm italic text-gray-400">(JPG, PNG, max 50MB total)</span>
+                                  </span>
+                                  <input
+                                    {...register1('product', {
+                                      required: true,
+                                      validate: files => {
+                                        const totalSize = Array.from(files).reduce((acc, file) => acc + file.size, 0);
+                                        return files && Array.from(files).every(file => ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.type)) && totalSize <= 50 * 1024 * 1024;
+                                      }
+                                    })}
+                                    disabled={infoLoading}
+                                    type="file"
+                                    accept=".jpg,.jpeg,.png,.webp,.avif"
+                                    multiple
+                                    className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out"
+                                  />
                                 </label>
-                                {errors1.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors1.product?.type === 'required' && <span className='text-red-500 italic'>Files are required</span>}
                                 {errors1.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
 
                                 <label className="block">
@@ -584,13 +640,26 @@ export default function Sell() {
                                 {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-[#04E762] rounded' />}
 
                                 <label className="block">
-                                  <span className="text-black">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
-                                  <input {...register1('product', {
-                                    required: true,
-                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out" />
+                                  <span className="text-black">
+                                    Upload the images your client will receive once they buy your product<br></br>
+                                    <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 50MB total)</span>
+                                  </span>
+                                  <input
+                                    {...register1('product', {
+                                      required: true,
+                                      validate: files => {
+                                        const totalSize = Array.from(files).reduce((acc, file) => acc + file.size, 0);
+                                        return files && Array.from(files).every(file => ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.type)) && totalSize <= 50 * 1024 * 1024;
+                                      }
+                                    })}
+                                    disabled={infoLoading}
+                                    type="file"
+                                    accept=".png,.jpg,.jpeg,.webp,.avif"
+                                    multiple
+                                    className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-[#04E762] text-black bg-transparent rounded outline-none focus:border-black hover:border-black transition-all ease-in-out"
+                                  />
                                 </label>
-                                {errors1.product?.type === 'required' && <span className='text-red-500 italic'>File is required</span>}
+                                {errors1.product?.type === 'required' && <span className='text-red-500 italic'>Files are required</span>}
                                 {errors1.product?.type === 'validate' && <span className='text-red-500 italic'>Invalid product</span>}
 
                                 <label className="block">
@@ -659,7 +728,7 @@ export default function Sell() {
                                 <p className='text-center text-white'>{messageRef.current.text}</p>
                                 <CustomLink 
                                     type='filled' 
-                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    title={messageRef.current.status === 'success' ? 'Go to the Market' : 'Retry'}
                                     path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
                                 />
@@ -881,7 +950,7 @@ export default function Sell() {
                                 <p className='text-center text-white'>{messageRef.current.text}</p>
                                 <CustomLink 
                                     type='filled' 
-                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    title={messageRef.current.status === 'success' ? 'Go to the Market' : 'Retry'}
                                     path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
                                 />
@@ -1103,7 +1172,7 @@ export default function Sell() {
                                 <p className='text-center text-white'>{messageRef.current.text}</p>
                                 <CustomLink 
                                     type='filled' 
-                                    title={messageRef.current.status === 'success' ? 'My Dashboard' : 'Retry'}
+                                    title={messageRef.current.status === 'success' ? 'Go to the Market' : 'Retry'}
                                     path={messageRef.current.status === 'success' ? `/marketplace` : '/sell'}
                                     customStyles='md:max-w-[170px] px-4 py-2.5 font-bold text-sm' 
                                 />
@@ -1353,13 +1422,26 @@ export default function Sell() {
                                 {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-white rounded' />}
 
                                 <label className="block">
-                                  <span className="text-white">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
-                                  <input {...register1('product', {
-                                    required: true,
-                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                  <span className="text-white">
+                                    Upload the images your client will receive once they buy your product<br></br>
+                                    <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 50MB total)</span>
+                                  </span>
+                                  <input
+                                    {...register1('product', {
+                                      required: true,
+                                      validate: files => {
+                                        const totalSize = Array.from(files).reduce((acc, file) => acc + file.size, 0);
+                                        return files && Array.from(files).every(file => ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.type)) && totalSize <= 50 * 1024 * 1024;
+                                      }
+                                    })}
+                                    disabled={infoLoading}
+                                    type="file"
+                                    accept=".png,.jpg,.jpeg,.webp,.avif"
+                                    multiple
+                                    className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out"
+                                  />
                                 </label>
-                                {errors1.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors1.product?.type === 'required' && <span className='text-yellow-300 italic'>Files are required</span>}
                                 {errors1.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
 
                                 <label className="block">
@@ -1452,13 +1534,26 @@ export default function Sell() {
                                 {imageThumbnailPreview && <img src={imageThumbnailPreview} alt="Thumbnail preview" className='max-w-[200px] h-auto max-h-[200px] border border-white rounded' />}
 
                                 <label className="block">
-                                  <span className="text-white">Upload in a compressed folder the images your client will receive once they buy your product<br></br> <span className="text-sm italic text-gray-400">(ZIP, RAR, max 50MB)</span></span>
-                                  <input {...register1('product', {
-                                    required: true,
-                                    validate: file => file && file[0] && (file[0].name.toLowerCase().endsWith('.zip') || file[0].name.toLowerCase().endsWith('.rar')) && file[0].size <= 50 * 1024 * 1024
-                                  })} disabled={infoLoading} type="file" accept=".zip,.rar" className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out" />
+                                  <span className="text-white">
+                                    Upload the images your client will receive once they buy your product<br></br>
+                                    <span className="text-sm italic text-gray-400">(PNG, JPG, WebP, AVIF, max 50MB total)</span>
+                                  </span>
+                                  <input
+                                    {...register1('product', {
+                                      required: true,
+                                      validate: files => {
+                                        const totalSize = Array.from(files).reduce((acc, file) => acc + file.size, 0);
+                                        return files && Array.from(files).every(file => ['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.type)) && totalSize <= 50 * 1024 * 1024;
+                                      }
+                                    })}
+                                    disabled={infoLoading}
+                                    type="file"
+                                    accept=".png,.jpg,.jpeg,.webp,.avif"
+                                    multiple
+                                    className="disabled:opacity-25 disabled:grayscale mt-1 block w-full p-2 border border-white text-white bg-transparent rounded outline-none focus:border-[#04E762] hover:border-[#04E762] transition-all ease-in-out"
+                                  />
                                 </label>
-                                {errors1.product?.type === 'required' && <span className='text-yellow-300 italic'>File is required</span>}
+                                {errors1.product?.type === 'required' && <span className='text-yellow-300 italic'>Files are required</span>}
                                 {errors1.product?.type === 'validate' && <span className='text-yellow-300 italic'>Invalid product</span>}
 
                                 <label className="block">
@@ -1636,7 +1731,7 @@ export default function Sell() {
                                   </label>
                                 </div>
                                 <div className='flex flex-wrap items-center justify-center mt-4'>
-                                  <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href = isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}` }>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-[#0070BA]'/> Continue with PayPal</>}</button>
+                                  <button disabled={!termsChecked || infoLoading} className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href = isLiveEnvState === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_URL_SANDBOX}` }>{infoLoading ? <ClipLoader /> : <><FaPaypal size={25} className='text-[#0070BA]'/> Continue with PayPal</>}</button>
                                 </div>
                               </motion.div>
                           </>

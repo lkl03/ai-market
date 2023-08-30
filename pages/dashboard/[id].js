@@ -37,6 +37,8 @@ import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 import { ProductionProvider, useProduction } from '../../context/productionContext';
 
+import isProduction from '../../hooks/isProduction';
+
 const Dashboard = (props) => {
   const snap = useSnapshot(state)
   const { user, loading } = useUser();
@@ -60,7 +62,7 @@ const Dashboard = (props) => {
   const [showApprovedModal, setShowApprovedModal] = useState(false);
   const [approvedProductToDelete, setApprovedProductToDelete] = useState(null);
 
-  const [isLiveEnvState, setIsLiveEnvState, isLiveEnvStateRef] = useState(false)
+  const isLiveEnvState = isProduction();
 
   // Redirects if necessary
   useEffect(() => {
@@ -210,7 +212,7 @@ const Dashboard = (props) => {
       let selectedFile = event.target.files[0];
   
       if (selectedFile) {
-        if (selectedFile.type === 'image/png' || selectedFile.type === 'image/jpeg') {
+        if (selectedFile.type === 'image/png' || selectedFile.type === 'image/jpeg' || selectedFile.type === 'image/avif' || selectedFile.type === 'image/webp') {
           if (selectedFile.size <= 5000000) { // 5 MB in bytes
             const storage = getStorage();
             const storageRef = ref(storage, `users/${user.uid}/backgrounds/profilebg`);
@@ -331,20 +333,38 @@ const Dashboard = (props) => {
     
     const downloadProduct = async (product) => {
       const storage = getStorage();
-      const productRef = ref(storage, product.productURL);
-    
-      getDownloadURL(productRef)
-        .then((url) => {
+      
+      const isJSONArray = product.productURL.startsWith('[') && product.productURL.endsWith(']');
+      
+      if (isJSONArray) {
+        const productURLs = JSON.parse(product.productURL);
+        productURLs.forEach((url, index) => {
           const xhr = new XMLHttpRequest();
           xhr.responseType = 'blob';
           xhr.onload = (event) => {
             const blob = xhr.response;
-            saveAs(blob, product.title);
+            saveAs(blob, `${product.title}-${index}`); 
           };
           xhr.open('GET', url);
           xhr.send();
-        })
-        .catch(() => {});
+        });
+      } else {
+        const productRef = ref(storage, product.productURL);
+        getDownloadURL(productRef)
+          .then((url) => {
+            const xhr = new XMLHttpRequest();
+            xhr.responseType = 'blob';
+            xhr.onload = (event) => {
+              const blob = xhr.response;
+              saveAs(blob, product.title); 
+            };
+            xhr.open('GET', url);
+            xhr.send();
+          })
+          .catch((error) => {
+            // handle error
+          });
+      }
     };
 
     const deleteUserData = async (userId) => {
@@ -518,14 +538,14 @@ const Dashboard = (props) => {
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                               <label className="block">
-                                <span className="text-black">The background you'll shown on your profile</span>
+                                <span className="text-black">The background that will be shown on your profile</span>
                                 <img src={profileBgPreview} alt="Profile background preview" className="rounded w-[200px] h-auto max-h-[200px] my-2" />
-                                <input type="file" onChange={handleProfileBgChange} className="mt-2" />
+                                <input type="file" accept=".png,.jpg,.jpeg,.webp,.avif" onChange={handleProfileBgChange} className="mt-2" />
                               </label>
                               <label className="block">
                                 <span className="text-black">Your profile picture</span>
                                 <img src={profilePicPreview} alt="Profile picture preview" className="rounded-full w-[175px] h-[175px] my-2" />
-                                <input type="file" onChange={handleProfilePicChange} className="mt-2" />
+                                <input type="file" accept=".png,.jpg,.jpeg,.webp,.avif" onChange={handleProfilePicChange} className="mt-2" />
                               </label>
                             </div>
 
@@ -567,7 +587,7 @@ const Dashboard = (props) => {
                           </label>
                           <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
                             Change Account
-                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5' type='button' onClick={() => window.location.href= isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#fff]'/>Continue with PayPal</button>
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#0070BA] bg-[#0070BA] text-white font-semibold px-4 py-2.5' type='button' onClick={() => window.location.href= isLiveEnvState === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#fff]'/>Continue with PayPal</button>
                           </div>
                           </div>
                           <h3 className="2xl:text-2xl text-xl font-black text-black text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
@@ -584,7 +604,7 @@ const Dashboard = (props) => {
                             {submittedProducts.map((product, index) => (
                             <>
                             <div className='flex flex-col flex-wrap items-center justify-center'>
-                            <Link key={product.id} className='md:w-auto w-full mb-4' href={`/product/${product.publicID}`} target='_blank'>
+                            <div key={product.id} className='md:w-auto w-full mb-4'>
                                 <div key={index} className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
                                 <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
@@ -600,8 +620,11 @@ const Dashboard = (props) => {
                                     <p className='italic text-white text-xs md:text-sm line-clamp-3'>{product.desc}</p>
                                 </div>
                                 </div>
-                            </Link>
+                            </div>
                             <button onClick={() => handleSubmittedDeleteClick(product)} className='flex flex-wrap gap-2 items-center justify-center hover:text-red-500 transition-colors ease-in-out'><FaTrash /> Delete Product</button>
+                            <div className='mt-4 mx-auto flex items-center justify-center'>
+                              <CustomLink type='outline' title='Edit Product' target="_blank" path={`/edit-product/${product.publicID}`} customStyles='md:max-w-[170px] w-fit px-4 py-2.5 font-bold' />
+                            </div>
                             </div>
                             </>
                             ))}
@@ -780,9 +803,9 @@ const Dashboard = (props) => {
 
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                               <label className="block">
-                                <span className="text-white">The background you'll shown on your profile</span>
+                                <span className="text-white">The background that will be shown on your profile</span>
                                 <img src={profileBgPreview} alt="Profile background preview" className="rounded w-[200px] h-auto max-h-[200px] my-2" />
-                                <input type="file" onChange={handleProfileBgChange} className="mt-2 text-white" />
+                                <input type="file" accept=".png,.jpg,.jpeg,.webp,.avif" onChange={handleProfileBgChange} className="mt-2 text-white" />
                               </label>
                               <label className="block">
                                 <span className="text-white">Your profile picture</span>
@@ -829,7 +852,7 @@ const Dashboard = (props) => {
                           </label>
                           <div className='flex flex-wrap flex-col items-center justify-center mt-4'>
                             <p className='text-white'>Change Account</p>
-                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href= isLiveEnvStateRef.current === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#0070BA]'/>Continue with PayPal</button>
+                            <button className='flex flex-wrap items-center justify-center gap-2 rounded-md border border-[#EEEEEE] bg-[#EEEEEE] font-semibold px-4 py-2.5 disabled:opacity-50' type='button' onClick={() => window.location.href= isLiveEnvState === true ? `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_LIVE}` : `${process.env.NEXT_PUBLIC_PAYPAL_LOGIN_EDIT_URL_SANDBOX}`}><FaPaypal size={25} className='text-[#0070BA]'/>Continue with PayPal</button>
                           </div>
                           </div>
                           <h3 className="2xl:text-2xl text-xl font-black text-white text-center capitalize transition-colors ease-in-out mt-8">Delete My Account</h3>
@@ -846,7 +869,7 @@ const Dashboard = (props) => {
                             {submittedProducts.map((product, index) => (
                               <>
                               <div className='flex flex-col flex-wrap items-center justify-center'>
-                              <Link key={product.id} className='md:w-auto w-full mb-4' href={`/product/${product.publicID}`} target='_blank'>
+                              <div key={product.id} className='md:w-auto w-full mb-4'>
                                 <div key={index} className="max-w-full md:max-w-[350px] m-auto cursor-pointer overflow-hidden">
                                   <div className='relative max-w-full md:max-w-[350px] m-auto'>
                                     <img src={product.thumbnailURL} alt="Thumbnail" className='w-full max-w-full min-w-[350px] object-cover mt-2 h-[200px] md:h-[175px] m-auto rounded-t-md' />
@@ -862,8 +885,11 @@ const Dashboard = (props) => {
                                     <p className='italic text-black text-xs md:text-sm line-clamp-3'>{product.desc}</p>
                                   </div>
                                 </div>
-                              </Link>
+                              </div>
                               <button onClick={() => handleSubmittedDeleteClick(product)} className='flex flex-wrap gap-2 items-center justify-center text-white hover:text-red-500 transition-colors ease-in-out'><FaTrash /> Delete Product</button>
+                              <div className='mt-4 mx-auto flex items-center justify-center'>
+                                <CustomLink type='filled' title='Edit Product' target="_blank" path={`/edit-product/${product.publicID}`} customStyles='md:max-w-[170px] w-fit px-4 py-2.5 font-bold' />
+                              </div>
                               </div>
                               </>
                             ))}

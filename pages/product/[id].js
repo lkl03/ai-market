@@ -41,6 +41,8 @@ import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 
 import { ProductionProvider, useProduction } from '../../context/productionContext';
 
+import isProduction from '../../hooks/isProduction';
+
 
 const Product = (props) => {
   const snap = useSnapshot(state)
@@ -64,7 +66,7 @@ const Product = (props) => {
   const [productToBuy, setProductToBuy] = useState(props.product);
   const [orderID, setOrderID, orderIDRef] = useState('');
   
-  const [isLiveEnvState, setIsLiveEnvState, isLiveEnvStateRef] = useState(false)
+  const isLiveEnvState = isProduction()
 
   const PayPalProviderWithProduction = ({ children }) => {
     const { isLive } = useProduction();
@@ -128,7 +130,7 @@ const Product = (props) => {
         desc: props.product.desc,
         merchantId: props.user.paypalMerchantID,
         emailAddress: props.user.paypalEmail,
-        isLiveEnv: isLiveEnvStateRef.current
+        isLiveEnv: isLiveEnvState
     })
     })
       .then(response => response.json())
@@ -261,7 +263,7 @@ const Product = (props) => {
         },
         body: JSON.stringify({
           orderID: data.orderID,
-          isLiveEnv: isLiveEnvStateRef.current
+          isLiveEnv: isLiveEnvState
         })
       })
   
@@ -325,21 +327,38 @@ const Product = (props) => {
   
   const downloadProduct = async (product) => {
     const storage = getStorage();
-    const productRef = ref(storage, product.productURL);
-  
-    getDownloadURL(productRef)
-      .then((url) => {
+    
+    const isJSONArray = product.productURL.startsWith('[') && product.productURL.endsWith(']');
+    
+    if (isJSONArray) {
+      const productURLs = JSON.parse(product.productURL);
+      productURLs.forEach((url, index) => {
         const xhr = new XMLHttpRequest();
         xhr.responseType = 'blob';
         xhr.onload = (event) => {
           const blob = xhr.response;
-          saveAs(blob, product.title); 
+          saveAs(blob, `${product.title}-${index}`); 
         };
         xhr.open('GET', url);
         xhr.send();
-      })
-      .catch((error) => {
       });
+    } else {
+      const productRef = ref(storage, product.productURL);
+      getDownloadURL(productRef)
+        .then((url) => {
+          const xhr = new XMLHttpRequest();
+          xhr.responseType = 'blob';
+          xhr.onload = (event) => {
+            const blob = xhr.response;
+            saveAs(blob, product.title); 
+          };
+          xhr.open('GET', url);
+          xhr.send();
+        })
+        .catch((error) => {
+          // handle error
+        });
+    }
   };
 
   function UserButton() {
